@@ -136,37 +136,41 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
       {/* 펼친 상태 */}
       {expanded && (
         <div className="border-t">
-          {/* 액션 버튼 */}
-          <div className="flex gap-1 p-2 border-b flex-wrap">
+          {/* 주요 액션 */}
+          <div className="flex gap-1.5 px-2 pt-2">
             <button
               onClick={() => setShowLoadDialog(true)}
               disabled={isLoading}
-              className="btn-primary flex-1 text-xs disabled:opacity-50"
+              className="btn-primary flex-1 text-xs py-2 disabled:opacity-50"
             >
               {isLoading ? '불러오는 중...' : '불러오기'}
-            </button>
-            <button onClick={handleOpenEditor} className="btn-secondary flex-1 text-xs">
-              에디터
-            </button>
-            <button onClick={handleDuplicate} className="btn-secondary flex-1 text-xs">
-              복제
             </button>
             <button
               onClick={handleRefreshFromTabs}
               disabled={isRefreshing}
-              className="btn-secondary flex-1 text-xs disabled:opacity-50"
+              className="btn-secondary flex-1 text-xs py-2 disabled:opacity-50"
               title="현재 브라우저 탭으로 프로필 덮어쓰기"
             >
-              {isRefreshing ? '갱신 중...' : '현재 탭 반영'}
+              {isRefreshing ? '갱신 중...' : '↻ 현재 탭 반영'}
+            </button>
+          </div>
+          {/* 보조 도구 */}
+          <div className="flex gap-1 px-2 pb-2 pt-1 border-b">
+            <button onClick={handleOpenEditor} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title="에디터에서 편집">
+              ✏ 편집
+            </button>
+            <button onClick={handleDuplicate} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title="프로필 복제">
+              ⧉ 복제
             </button>
             <button
               onClick={handleShowHistory}
-              className={`btn-secondary flex-1 text-xs ${showHistory ? 'ring-1 ring-blue-400' : ''}`}
+              className={`btn-icon text-[11px] flex-1 ${showHistory ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+              title="변경 히스토리"
             >
-              히스토리
+              ↺ 히스토리
             </button>
-            <button onClick={onDelete} className="btn-danger flex-1 text-xs">
-              삭제
+            <button onClick={onDelete} className="btn-icon text-[11px] text-gray-400 hover:text-red-600 flex-1" title="프로필 삭제">
+              ✕ 삭제
             </button>
           </div>
 
