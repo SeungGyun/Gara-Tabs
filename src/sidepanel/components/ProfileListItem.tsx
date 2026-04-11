@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Profile, LoadProfileOption } from '../../shared/types';
+import type { Profile, ProfileSnapshot, LoadProfileOption } from '../../shared/types';
 import { useProfileStore } from '../../shared/store/profileStore';
 import { COLOR_MAP } from '../../shared/utils/colors';
 import InlineEditText from '../../shared/components/InlineEditText';
@@ -14,9 +14,15 @@ interface Props {
 export default function ProfileListItem({ profile, onDelete, onShowToast }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyList, setHistoryList] = useState<ProfileSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const updateProfile = useProfileStore((s) => s.updateProfile);
   const saveProfile = useProfileStore((s) => s.saveProfile);
+  const refreshFromTabs = useProfileStore((s) => s.refreshFromTabs);
+  const getHistory = useProfileStore((s) => s.getHistory);
+  const restoreFromHistory = useProfileStore((s) => s.restoreFromHistory);
 
   const totalTabs = profile.groups.reduce((sum, g) => sum + g.tabs.length, 0);
 
@@ -69,6 +75,36 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
     onShowToast(`"${clone.name}" 프로필이 복제되었습니다.`);
   };
 
+  const handleRefreshFromTabs = async () => {
+    if (!window.confirm('현재 브라우저 탭으로 프로필을 덮어쓰시겠습니까?\n(이전 버전은 히스토리에 보관됩니다)')) return;
+    setIsRefreshing(true);
+    try {
+      await refreshFromTabs(profile.id);
+      onShowToast(`"${profile.name}" 프로필이 현재 탭으로 갱신되었습니다.`);
+    } catch {
+      onShowToast('갱신에 실패했습니다.', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleShowHistory = async () => {
+    if (showHistory) {
+      setShowHistory(false);
+      return;
+    }
+    const list = await getHistory(profile.id);
+    setHistoryList(list);
+    setShowHistory(true);
+  };
+
+  const handleRestore = async (timestamp: number) => {
+    if (!window.confirm('이 버전으로 복원하시겠습니까?\n(현재 버전은 히스토리에 보관됩니다)')) return;
+    await restoreFromHistory(profile.id, timestamp);
+    onShowToast('이전 버전으로 복원되었습니다.');
+    setShowHistory(false);
+  };
+
   const handleTabClick = (url: string) => {
     if (url) chrome.tabs.create({ url, active: false });
   };
@@ -101,7 +137,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
       {expanded && (
         <div className="border-t">
           {/* 액션 버튼 */}
-          <div className="flex gap-1 p-2 border-b">
+          <div className="flex gap-1 p-2 border-b flex-wrap">
             <button
               onClick={() => setShowLoadDialog(true)}
               disabled={isLoading}
@@ -114,6 +150,20 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             </button>
             <button onClick={handleDuplicate} className="btn-secondary flex-1 text-xs">
               복제
+            </button>
+            <button
+              onClick={handleRefreshFromTabs}
+              disabled={isRefreshing}
+              className="btn-secondary flex-1 text-xs disabled:opacity-50"
+              title="현재 브라우저 탭으로 프로필 덮어쓰기"
+            >
+              {isRefreshing ? '갱신 중...' : '현재 탭 반영'}
+            </button>
+            <button
+              onClick={handleShowHistory}
+              className={`btn-secondary flex-1 text-xs ${showHistory ? 'ring-1 ring-blue-400' : ''}`}
+            >
+              히스토리
             </button>
             <button onClick={onDelete} className="btn-danger flex-1 text-xs">
               삭제
@@ -144,6 +194,44 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                   취소
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* 히스토리 */}
+          {showHistory && (
+            <div className="p-2 border-b bg-gray-50 dark:bg-gray-800/50 space-y-1">
+              <p className="text-xs font-medium px-1">변경 히스토리 (최대 10개)</p>
+              {historyList.length === 0 ? (
+                <p className="text-xs text-gray-400 px-1 py-2">히스토리가 없습니다.</p>
+              ) : (
+                historyList.map((snap) => {
+                  const tabCount = snap.profile.groups.reduce((s, g) => s + g.tabs.length, 0);
+                  return (
+                    <div
+                      key={snap.timestamp}
+                      className="flex items-center justify-between text-xs bg-white dark:bg-gray-700 rounded px-2 py-1.5"
+                    >
+                      <div>
+                        <span className="text-gray-600 dark:text-gray-300">
+                          {new Date(snap.timestamp).toLocaleString('ko-KR', {
+                            month: 'short', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </span>
+                        <span className="text-gray-400 ml-1.5">
+                          {snap.profile.groups.length}그룹 · {tabCount}탭
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRestore(snap.timestamp)}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium"
+                      >
+                        복원
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
 

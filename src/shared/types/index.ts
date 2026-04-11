@@ -81,10 +81,18 @@ export type LoadProfileOption =
 // 스토리지 키
 // ============================================================
 
+export interface ProfileSnapshot {
+  timestamp: number;
+  profile: Profile;
+}
+
 export const STORAGE_KEYS = {
   PROFILES: 'tab_manager_profiles',
   SETTINGS: 'tab_manager_settings',
+  PROFILE_HISTORY: 'tab_manager_profile_history',
 } as const;
+
+export const MAX_PROFILE_HISTORY = 10;
 
 // ============================================================
 // 메시지 타입 (Background ↔ Side Panel / Editor)
