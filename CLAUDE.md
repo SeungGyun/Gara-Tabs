@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+코드 변경 작업을 시작하기 전에 반드시 새 브랜치를 생성한 뒤 작업한다. master에 직접 커밋하지 않는다.
+
+```bash
+git checkout -b feat/기능-설명    # 기능 추가
+git checkout -b fix/버그-설명     # 버그 수정
+git checkout -b ui/개선-설명      # UI 개선
+```
+
+작업 완료 후 master에 머지하고 푸시하는 것은 사용자가 명시적으로 요청할 때만 한다.
+
 ## Build & Dev Commands
 
 ```bash
