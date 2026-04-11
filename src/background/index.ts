@@ -42,6 +42,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'CLOSE_COLLAPSED_GROUPS':
       closeCollapsedGroups().then(sendResponse);
       return true;
+
+    case 'MOVE_TAB':
+      moveTab(message.tabId, message.targetIndex, message.targetGroupId).then(sendResponse);
+      return true;
+
+    case 'MOVE_GROUP':
+      moveGroup(message.groupId, message.targetIndex).then(sendResponse);
+      return true;
   }
 });
 
@@ -410,6 +418,30 @@ async function closeCollapsedGroups(): Promise<{ success: boolean; closed: numbe
     return { success: true, closed: collapsedGroupIds.size, tabsClosed: tabIdsToClose.length };
   } catch {
     return { success: false, closed: 0, tabsClosed: 0 };
+  }
+}
+
+// ===== 탭/그룹 이동 =====
+async function moveTab(tabId: number, targetIndex: number, targetGroupId?: number): Promise<{ success: boolean }> {
+  try {
+    await chrome.tabs.move(tabId, { index: targetIndex });
+    if (targetGroupId !== undefined && targetGroupId !== -1) {
+      await chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId });
+    } else if (targetGroupId === -1) {
+      await chrome.tabs.ungroup(tabId);
+    }
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+async function moveGroup(groupId: number, targetIndex: number): Promise<{ success: boolean }> {
+  try {
+    await chrome.tabGroups.move(groupId, { index: targetIndex });
+    return { success: true };
+  } catch {
+    return { success: false };
   }
 }
 
