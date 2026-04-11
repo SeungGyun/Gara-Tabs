@@ -199,12 +199,8 @@ async function loadProfile(
         });
       }
 
-      // 중복 URL 체크
-      const existingUrls = new Set(
-        existingTabs.filter((t) => t.url).map((t) => normalizeUrl(t.url!)),
-      );
-
-      await createProfileTabs(profile, currentWindow.id!, existingUrls);
+      // 프로필 탭 전부 열기 (중복 무시)
+      await createProfileTabs(profile, currentWindow.id!);
     }
 
     return { success: true };
@@ -222,6 +218,7 @@ async function createProfileTabs(
     const createdTabIds: number[] = [];
 
     for (const tab of group.tabs) {
+      if (!tab.url || tab.url === '') continue;
       if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
 
       try {
