@@ -204,7 +204,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
           {/* 히스토리 */}
           {showHistory && (
             <div className="p-2 border-b bg-gray-50 dark:bg-gray-800/50 space-y-1">
-              <p className="text-xs font-medium px-1">변경 히스토리 (최대 10개)</p>
+              <p className="text-xs font-medium px-1">변경 히스토리 (최근 2일)</p>
               {historyList.length === 0 ? (
                 <p className="text-xs text-gray-400 px-1 py-2">히스토리가 없습니다.</p>
               ) : (

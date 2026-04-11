@@ -92,7 +92,7 @@ export const STORAGE_KEYS = {
   PROFILE_HISTORY: 'tab_manager_profile_history',
 } as const;
 
-export const MAX_PROFILE_HISTORY = 10;
+export const PROFILE_HISTORY_RETENTION_MS = 2 * 24 * 60 * 60 * 1000; // 2일
 
 // ============================================================
 // 메시지 타입 (Background ↔ Side Panel / Editor)

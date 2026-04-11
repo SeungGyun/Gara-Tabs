@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Profile, Group, Tab, ProfileSnapshot } from '../types';
-import { STORAGE_KEYS, MAX_PROFILE_HISTORY } from '../types';
+import { STORAGE_KEYS, PROFILE_HISTORY_RETENTION_MS } from '../types';
 import { generateId } from '../utils/uuid';
 import { UNGROUPED_NAME, PINNED_GROUP_NAME } from '../constants';
 import { assignColor } from '../utils/colors';
@@ -47,8 +47,9 @@ async function pushToHistory(profile: Profile): Promise<void> {
   const map = await readHistoryMap();
   const list = map[profile.id] ?? [];
   list.unshift({ timestamp: Date.now(), profile: structuredClone(profile) });
-  if (list.length > MAX_PROFILE_HISTORY) list.length = MAX_PROFILE_HISTORY;
-  map[profile.id] = list;
+  // 2일 초과 항목 제거
+  const cutoff = Date.now() - PROFILE_HISTORY_RETENTION_MS;
+  map[profile.id] = list.filter((s) => s.timestamp >= cutoff);
   await writeHistoryMap(map);
 }
 
