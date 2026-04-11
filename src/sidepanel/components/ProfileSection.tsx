@@ -119,31 +119,20 @@ export default function ProfileSection({ onShowToast }: Props) {
 
   return (
     <div className="p-3 space-y-3">
-      {/* 저장/내보내기/가져오기 + 검색 */}
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="프로필 검색..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="input flex-1"
-          />
-          <button
-            onClick={() => setShowSaveDialog(true)}
-            className="btn-primary whitespace-nowrap"
-          >
-            + 저장
-          </button>
-        </div>
-        <div className="flex gap-1">
-          <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary text-xs flex-1 disabled:opacity-50">
-            내보내기 (JSON)
-          </button>
-          <button onClick={handleImport} className="btn-secondary text-xs flex-1">
-            가져오기
-          </button>
-        </div>
+      {/* 새로 만들기 / 내보내기 / 가져오기 */}
+      <div className="flex gap-1">
+        <button
+          onClick={() => setShowSaveDialog(true)}
+          className="btn-primary flex-1 text-xs"
+        >
+          + 새로 만들기
+        </button>
+        <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary flex-1 text-xs disabled:opacity-50">
+          내보내기
+        </button>
+        <button onClick={handleImport} className="btn-secondary flex-1 text-xs">
+          가져오기
+        </button>
       </div>
 
       {/* 저장 다이얼로그 */}
@@ -174,6 +163,17 @@ export default function ProfileSection({ onShowToast }: Props) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 검색 */}
+      {profiles.length > 0 && (
+        <input
+          type="text"
+          placeholder="프로필 검색..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input"
+        />
       )}
 
       {/* 프로필 목록 */}
