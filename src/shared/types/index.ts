@@ -44,16 +44,28 @@ export const TAB_GROUP_COLORS: ChromeTabGroupColor[] = [
 
 export type SubdomainMode = 'merge' | 'split' | 'custom';
 
+export interface AutoGroupRule {
+  id: string;
+  pattern: string;       // URL 패턴 (contains 매칭)
+  groupName: string;     // 배정할 그룹 이름
+  color: ChromeTabGroupColor;
+  enabled: boolean;
+}
+
 export interface Settings {
   subdomainMode: SubdomainMode;
   customDomainRules: Record<string, string>;
   excludePatterns: string[];
+  autoGroupEnabled: boolean;
+  autoGroupRules: AutoGroupRule[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   subdomainMode: 'merge',
   customDomainRules: {},
   excludePatterns: ['chrome://', 'chrome-extension://', 'about:', 'edge://'],
+  autoGroupEnabled: false,
+  autoGroupRules: [],
 };
 
 // ============================================================

@@ -56,6 +56,63 @@ export default function App() {
     return JSON.stringify(s.currentProfile) !== JSON.stringify(s.history[0]);
   });
 
+  // 키보드 단축키
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+S: 저장
+      if (ctrl && e.key === 's') {
+        e.preventDefault();
+        if (hasChanges) handleSave();
+        return;
+      }
+
+      // Ctrl+Z: 실행 취소
+      if (ctrl && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        useTabStore.getState().undo();
+        return;
+      }
+
+      // Ctrl+Shift+Z 또는 Ctrl+Y: 다시 실행
+      if ((ctrl && e.shiftKey && e.key === 'z') || (ctrl && e.key === 'y')) {
+        e.preventDefault();
+        useTabStore.getState().redo();
+        return;
+      }
+
+      // Delete: 선택된 항목 삭제
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 입력 필드에서는 무시
+        if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+        const state = useTabStore.getState();
+        if (!state.selectedItemId) return;
+        e.preventDefault();
+        if (state.selectedItemType === 'group') {
+          state.deleteGroup(state.selectedItemId);
+        } else if (state.selectedItemType === 'tab') {
+          // 탭이 속한 그룹 찾기
+          for (const g of state.currentProfile?.groups ?? []) {
+            if (g.tabs.some((t) => t.id === state.selectedItemId)) {
+              state.deleteTab(g.id, state.selectedItemId);
+              break;
+            }
+          }
+        }
+        return;
+      }
+
+      // Escape: 선택 해제
+      if (e.key === 'Escape') {
+        useTabStore.getState().selectItem(null, null);
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [hasChanges, handleSave]);
+
   // 타이틀 업데이트
   useEffect(() => {
     const base = 'Tab Manager Pro — Editor';

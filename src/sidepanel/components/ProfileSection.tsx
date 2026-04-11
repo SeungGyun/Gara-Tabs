@@ -57,6 +57,51 @@ export default function ProfileSection({ onShowToast }: Props) {
     }
   };
 
+  // ── JSON 내보내기/가져오기 ──
+
+  const handleExportAll = () => {
+    const json = JSON.stringify(profiles, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tab-manager-profiles-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    onShowToast(`${profiles.length}개 프로필을 내보냈습니다.`);
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text);
+        const arr = Array.isArray(imported) ? imported : [imported];
+        let count = 0;
+        for (const p of arr) {
+          if (p && p.name && p.groups) {
+            await useProfileStore.getState().saveProfile({
+              ...p,
+              id: p.id ?? crypto.randomUUID(),
+              createdAt: p.createdAt ?? Date.now(),
+              updatedAt: Date.now(),
+            });
+            count++;
+          }
+        }
+        onShowToast(`${count}개 프로필을 가져왔습니다.`);
+      } catch {
+        onShowToast('JSON 파일 형식이 올바르지 않습니다.', 'error');
+      }
+    };
+    input.click();
+  };
+
   const handleDelete = async (id: string, name: string) => {
     const ok = window.confirm(`"${name}" 프로필을 삭제하시겠습니까?`);
     if (!ok) return;
@@ -74,21 +119,31 @@ export default function ProfileSection({ onShowToast }: Props) {
 
   return (
     <div className="p-3 space-y-3">
-      {/* 저장 버튼 + 검색 */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="프로필 검색..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="input flex-1"
-        />
-        <button
-          onClick={() => setShowSaveDialog(true)}
-          className="btn-primary whitespace-nowrap"
-        >
-          + 저장
-        </button>
+      {/* 저장/내보내기/가져오기 + 검색 */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="프로필 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="input flex-1"
+          />
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            className="btn-primary whitespace-nowrap"
+          >
+            + 저장
+          </button>
+        </div>
+        <div className="flex gap-1">
+          <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary text-xs flex-1 disabled:opacity-50">
+            내보내기 (JSON)
+          </button>
+          <button onClick={handleImport} className="btn-secondary text-xs flex-1">
+            가져오기
+          </button>
+        </div>
       </div>
 
       {/* 저장 다이얼로그 */}

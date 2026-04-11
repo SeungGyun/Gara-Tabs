@@ -390,6 +390,46 @@ function openEditor(profileId?: string) {
   chrome.tabs.create({ url: fullUrl });
 }
 
+// ===== 자동 그룹화: 탭 생성/업데이트 시 규칙 적용 =====
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // URL이 완전히 로드된 후에만 실행
+  if (changeInfo.status !== 'complete' || !tab.url) return;
+
+  try {
+    const settings = await getSettings();
+    if (!settings.autoGroupEnabled || settings.autoGroupRules.length === 0) return;
+    if (tab.pinned) return;
+    if (isExcludedUrl(tab.url, settings.excludePatterns)) return;
+    // 이미 그룹에 속해 있으면 스킵
+    if (tab.groupId !== undefined && tab.groupId !== -1) return;
+
+    const matchedRule = settings.autoGroupRules.find(
+      (rule) => rule.enabled && tab.url!.toLowerCase().includes(rule.pattern.toLowerCase()),
+    );
+    if (!matchedRule) return;
+
+    // 같은 이름의 기존 그룹이 있으면 거기에 추가, 없으면 새 그룹 생성
+    const windowId = tab.windowId;
+    const existingGroups = await chrome.tabGroups.query({ windowId });
+    const existing = existingGroups.find((g) => g.title === matchedRule.groupName);
+
+    if (existing) {
+      await chrome.tabs.group({ tabIds: [tabId], groupId: existing.id });
+    } else {
+      const groupId = await chrome.tabs.group({
+        tabIds: [tabId],
+        createProperties: { windowId },
+      });
+      await chrome.tabGroups.update(groupId, {
+        title: matchedRule.groupName,
+        color: matchedRule.color as chrome.tabGroups.ColorEnum,
+      });
+    }
+  } catch {
+    // 자동 그룹화 실패 시 무시
+  }
+});
+
 // ===== 유틸 =====
 async function getSettings(): Promise<Settings> {
   const data = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS);

@@ -36,9 +36,27 @@ export default function EditorArea() {
     useSensor(KeyboardSensor),
   );
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   if (!currentProfile) return null;
 
-  const groups = currentProfile.groups;
+  // 검색 필터 적용
+  const allGroups = currentProfile.groups;
+  const groups = searchQuery
+    ? allGroups
+        .map((g) => ({
+          ...g,
+          tabs: g.tabs.filter(
+            (t) =>
+              t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              t.url.toLowerCase().includes(searchQuery.toLowerCase()),
+          ),
+        }))
+        .filter((g) =>
+          g.tabs.length > 0 ||
+          g.name.toLowerCase().includes(searchQuery.toLowerCase()),
+        )
+    : allGroups;
   const groupIds = groups.map((g) => g.id);
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -112,11 +130,27 @@ export default function EditorArea() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-4">
-        <h2 className="text-lg font-bold">{currentProfile.name}</h2>
-        <p className="text-xs text-gray-500">
-          {groups.length}개 그룹 · {groups.reduce((s, g) => s + g.tabs.length, 0)}개 탭
-        </p>
+      <div className="mb-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">{currentProfile.name}</h2>
+            <p className="text-xs text-gray-500">
+              {allGroups.length}개 그룹 · {allGroups.reduce((s, g) => s + g.tabs.length, 0)}개 탭
+            </p>
+          </div>
+        </div>
+        <input
+          type="text"
+          placeholder="그룹/탭 검색..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input text-sm"
+        />
+        {searchQuery && (
+          <p className="text-xs text-gray-400">
+            {groups.length}개 그룹 · {groups.reduce((s, g) => s + g.tabs.length, 0)}개 탭 일치
+          </p>
+        )}
       </div>
 
       <DndContext
