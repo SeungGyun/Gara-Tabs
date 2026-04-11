@@ -26,10 +26,15 @@ export function extractDomain(
   const hostname = parsed.hostname;
   if (!hostname) return null;
 
-  // custom 모드: 매칭 규칙이 있으면 해당 그룹명 반환
-  if (mode === 'custom' || Object.keys(customRules).length > 0) {
-    const rule = customRules[hostname];
-    if (rule) return rule;
+  // custom 규칙 매칭: hostname 그대로, www. 제거, base domain 순서로 시도
+  if (Object.keys(customRules).length > 0) {
+    const hostnameNoWww = hostname.replace(/^www\./, '');
+    const baseDomain = extractBaseDomain(hostname);
+    const match =
+      customRules[hostname] ??
+      customRules[hostnameNoWww] ??
+      customRules[baseDomain];
+    if (match) return match;
   }
 
   // split 모드: 전체 hostname 반환
