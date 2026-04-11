@@ -424,7 +424,13 @@ async function closeCollapsedGroups(): Promise<{ success: boolean; closed: numbe
 // ===== 탭/그룹 이동 =====
 async function moveTab(tabId: number, targetIndex: number, targetGroupId?: number): Promise<{ success: boolean }> {
   try {
-    await chrome.tabs.move(tabId, { index: targetIndex });
+    const tab = await chrome.tabs.get(tabId);
+    // chrome.tabs.move는 "제거 후 삽입" 방식이라
+    // 소스가 타겟보다 앞에 있으면 제거 시 인덱스가 1 당겨짐
+    const adjustedIndex = tab.index !== undefined && tab.index < targetIndex
+      ? targetIndex - 1
+      : targetIndex;
+    await chrome.tabs.move(tabId, { index: adjustedIndex });
     if (targetGroupId !== undefined && targetGroupId !== -1) {
       await chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId });
     } else if (targetGroupId === -1) {
