@@ -41,10 +41,10 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
       if (result.success) {
         onShowToast(`"${profile.name}" 프로필을 불러왔습니다.`);
       } else {
-        onShowToast('프로필 불러오기에 실패했습니다.', 'error');
+        onShowToast('프로필 열기에 실패했습니다.', 'error');
       }
     } catch {
-      onShowToast('프로필 불러오기 중 오류가 발생했습니다.', 'error');
+      onShowToast('프로필 열기 중 오류가 발생했습니다.', 'error');
     } finally {
       setIsLoading(false);
       setShowLoadDialog(false);
@@ -143,7 +143,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
               disabled={isLoading}
               className="btn-primary flex-1 text-xs py-2 disabled:opacity-50"
             >
-              {isLoading ? '불러오는 중...' : '불러오기'}
+              {isLoading ? '여는 중...' : '열기'}
             </button>
             <button
               onClick={handleRefreshFromTabs}
@@ -151,7 +151,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
               className="btn-secondary flex-1 text-xs py-2 disabled:opacity-50"
               title="현재 브라우저 탭으로 프로필 덮어쓰기"
             >
-              {isRefreshing ? '갱신 중...' : '↻ 현재 탭 반영'}
+              {isRefreshing ? '갱신 중...' : '↻ 덮어쓰기'}
             </button>
           </div>
           {/* 보조 도구 */}

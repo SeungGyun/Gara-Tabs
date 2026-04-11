@@ -105,4 +105,5 @@ export type MessageType =
   | { type: 'REMOVE_DUPLICATES'; keepTabIds: number[] }
   | { type: 'OPEN_EDITOR'; profileId?: string }
   | { type: 'GET_CURRENT_TABS' }
-  | { type: 'SAVE_PROFILE'; name: string };
+  | { type: 'SAVE_PROFILE'; name: string }
+  | { type: 'CLOSE_COLLAPSED_GROUPS' };

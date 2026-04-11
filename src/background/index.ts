@@ -38,6 +38,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'SAVE_PROFILE':
       saveCurrentAsProfile(message.name).then(sendResponse);
       return true;
+
+    case 'CLOSE_COLLAPSED_GROUPS':
+      closeCollapsedGroups().then(sendResponse);
+      return true;
   }
 });
 
@@ -377,6 +381,35 @@ async function saveCurrentAsProfile(name: string) {
     return { success: true, profile };
   } catch {
     return { success: false };
+  }
+}
+
+// ===== 비활성(접힌) 그룹 닫기 =====
+async function closeCollapsedGroups(): Promise<{ success: boolean; closed: number; tabsClosed: number }> {
+  try {
+    const currentWindow = await chrome.windows.getCurrent();
+    const groups = await chrome.tabGroups.query({ windowId: currentWindow.id });
+    const tabs = await chrome.tabs.query({ windowId: currentWindow.id });
+
+    const collapsedGroupIds = new Set(
+      groups.filter((g) => g.collapsed).map((g) => g.id),
+    );
+
+    if (collapsedGroupIds.size === 0) {
+      return { success: true, closed: 0, tabsClosed: 0 };
+    }
+
+    const tabIdsToClose = tabs
+      .filter((t) => t.groupId !== undefined && collapsedGroupIds.has(t.groupId) && t.id)
+      .map((t) => t.id!);
+
+    if (tabIdsToClose.length > 0) {
+      await chrome.tabs.remove(tabIdsToClose);
+    }
+
+    return { success: true, closed: collapsedGroupIds.size, tabsClosed: tabIdsToClose.length };
+  } catch {
+    return { success: false, closed: 0, tabsClosed: 0 };
   }
 }
 
