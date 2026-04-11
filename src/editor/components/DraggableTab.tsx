@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Tab } from '../../shared/types';
 import { useTabStore } from '../../shared/store/tabStore';
+import InlineEditText from '../../shared/components/InlineEditText';
 
 interface Props {
   tab: Tab;
@@ -12,6 +13,7 @@ export default function DraggableTab({ tab, groupId }: Props) {
   const selectItem = useTabStore((s) => s.selectItem);
   const selectedItemId = useTabStore((s) => s.selectedItemId);
   const deleteTab = useTabStore((s) => s.deleteTab);
+  const updateTab = useTabStore((s) => s.updateTab);
 
   const {
     attributes,
@@ -65,10 +67,13 @@ export default function DraggableTab({ tab, groupId }: Props) {
         <span className="w-4 h-4 rounded bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
       )}
 
-      {/* 제목 */}
-      <span className="text-xs truncate flex-1" title={tab.url}>
-        {tab.title || tab.url}
-      </span>
+      {/* 제목 (더블클릭으로 편집) */}
+      <InlineEditText
+        value={tab.title || tab.url}
+        onCommit={(title) => updateTab(groupId, tab.id, { title })}
+        className="text-xs truncate flex-1"
+        inputClassName="text-xs w-full"
+      />
 
       {/* 고정 표시 */}
       {tab.pinned && <span className="text-xs text-gray-400">📌</span>}

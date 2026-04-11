@@ -113,6 +113,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [hasChanges, handleSave]);
 
+  // 미저장 변경 경고
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasChanges]);
+
   // 타이틀 업데이트
   useEffect(() => {
     const base = 'Tab Manager Pro — Editor';
@@ -127,7 +138,12 @@ export default function App() {
         <Sidebar
           profiles={profiles}
           currentProfileId={currentProfile?.id ?? null}
-          onSelect={setCurrentProfile}
+          onSelect={(profile) => {
+            if (hasChanges) {
+              if (!window.confirm('저장하지 않은 변경사항이 있습니다. 프로필을 전환하시겠습니까?')) return;
+            }
+            setCurrentProfile(profile);
+          }}
         />
 
         <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">

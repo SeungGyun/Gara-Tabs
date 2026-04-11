@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Group } from '../../shared/types';
 import { COLOR_MAP, COLOR_MAP_LIGHT } from '../../shared/utils/colors';
 import { useTabStore } from '../../shared/store/tabStore';
+import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableTab from './DraggableTab';
 
 interface Props {
@@ -20,6 +21,7 @@ export default function DraggableGroup({ group }: Props) {
   const selectItem = useTabStore((s) => s.selectItem);
   const selectedItemId = useTabStore((s) => s.selectedItemId);
   const deleteGroup = useTabStore((s) => s.deleteGroup);
+  const updateGroup = useTabStore((s) => s.updateGroup);
   const addTab = useTabStore((s) => s.addTab);
 
   const {
@@ -93,7 +95,12 @@ export default function DraggableGroup({ group }: Props) {
           className="w-3 h-3 rounded-full flex-shrink-0"
           style={{ backgroundColor: borderColor }}
         />
-        <span className="text-sm font-medium flex-1 truncate">{group.name}</span>
+        <InlineEditText
+          value={group.name}
+          onCommit={(name) => updateGroup(group.id, { name })}
+          className="text-sm font-medium flex-1 truncate"
+          inputClassName="text-sm font-medium w-full"
+        />
         <span className="text-xs text-gray-500">{group.tabs.length}개</span>
 
         <button

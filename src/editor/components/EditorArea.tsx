@@ -17,11 +17,13 @@ import {
 } from '@dnd-kit/sortable';
 import { useTabStore } from '../../shared/store/tabStore';
 import { TAB_GROUP_COLORS, type ChromeTabGroupColor } from '../../shared/types';
+import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
 
 export default function EditorArea() {
   const currentProfile = useTabStore((s) => s.currentProfile);
   const addGroup = useTabStore((s) => s.addGroup);
+  const renameProfile = useTabStore((s) => s.renameProfile);
   const reorderGroups = useTabStore((s) => s.reorderGroups);
   const moveTab = useTabStore((s) => s.moveTab);
 
@@ -133,7 +135,12 @@ export default function EditorArea() {
       <div className="mb-4 space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">{currentProfile.name}</h2>
+            <InlineEditText
+              value={currentProfile.name}
+              onCommit={renameProfile}
+              className="text-lg font-bold"
+              inputClassName="text-lg font-bold w-64"
+            />
             <p className="text-xs text-gray-500">
               {allGroups.length}개 그룹 · {allGroups.reduce((s, g) => s + g.tabs.length, 0)}개 탭
             </p>

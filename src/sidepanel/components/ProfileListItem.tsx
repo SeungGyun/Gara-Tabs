@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { Profile, LoadProfileOption } from '../../shared/types';
+import { useProfileStore } from '../../shared/store/profileStore';
 import { COLOR_MAP } from '../../shared/utils/colors';
+import InlineEditText from '../../shared/components/InlineEditText';
+import { generateId } from '../../shared/utils/uuid';
 
 interface Props {
   profile: Profile;
@@ -12,6 +15,8 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
   const [expanded, setExpanded] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const updateProfile = useProfileStore((s) => s.updateProfile);
+  const saveProfile = useProfileStore((s) => s.saveProfile);
 
   const totalTabs = profile.groups.reduce((sum, g) => sum + g.tabs.length, 0);
 
@@ -44,16 +49,45 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
     chrome.runtime.sendMessage({ type: 'OPEN_EDITOR', profileId: profile.id });
   };
 
+  const handleRename = async (newName: string) => {
+    await updateProfile(profile.id, { name: newName });
+    onShowToast(`프로필 이름이 "${newName}"으로 변경되었습니다.`);
+  };
+
+  const handleDuplicate = async () => {
+    const clone = structuredClone(profile);
+    clone.id = generateId();
+    clone.name = profile.name + ' (복사)';
+    clone.createdAt = Date.now();
+    clone.updatedAt = Date.now();
+    // 그룹/탭 ID도 새로 생성
+    for (const g of clone.groups) {
+      g.id = generateId();
+      for (const t of g.tabs) t.id = generateId();
+    }
+    await saveProfile(clone);
+    onShowToast(`"${clone.name}" 프로필이 복제되었습니다.`);
+  };
+
+  const handleTabClick = (url: string) => {
+    if (url) chrome.tabs.create({ url, active: false });
+  };
+
   return (
     <div className="card overflow-hidden">
       {/* 헤더 */}
-      <button
+      <div
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        className="w-full flex items-center gap-2 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
       >
         <span className="text-xs text-gray-400">{expanded ? '▼' : '▶'}</span>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{profile.name}</div>
+          <InlineEditText
+            value={profile.name}
+            onCommit={handleRename}
+            className="text-sm font-medium truncate block"
+            inputClassName="text-sm font-medium w-full"
+          />
           <div className="text-xs text-gray-500">
             {profile.groups.length}개 그룹 · {totalTabs}개 탭
           </div>
@@ -61,7 +95,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
         <div className="text-xs text-gray-400">
           {new Date(profile.createdAt).toLocaleDateString('ko-KR')}
         </div>
-      </button>
+      </div>
 
       {/* 펼친 상태 */}
       {expanded && (
@@ -77,6 +111,9 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             </button>
             <button onClick={handleOpenEditor} className="btn-secondary flex-1 text-xs">
               에디터
+            </button>
+            <button onClick={handleDuplicate} className="btn-secondary flex-1 text-xs">
+              복제
             </button>
             <button onClick={onDelete} className="btn-danger flex-1 text-xs">
               삭제
@@ -125,8 +162,9 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                 {group.tabs.map((tab) => (
                   <div
                     key={tab.id}
-                    className="flex items-center gap-1.5 pl-6 pr-2 py-0.5"
-                    title={tab.url}
+                    className="flex items-center gap-1.5 pl-6 pr-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                    title={`${tab.url}\n클릭하여 새 탭에서 열기`}
+                    onClick={() => handleTabClick(tab.url)}
                   >
                     {tab.favIconUrl ? (
                       <img

@@ -1,12 +1,33 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useChromeTabs } from '../../shared/hooks/useChromeTabs';
 import { useTabGroups } from '../../shared/hooks/useTabGroups';
+import { useProfileStore } from '../../shared/store/profileStore';
 import { COLOR_MAP_LIGHT, COLOR_MAP } from '../../shared/utils/colors';
+import { normalizeUrl } from '../../shared/utils/dedup';
 import type { ChromeTabGroupColor } from '../../shared/types';
 
 export default function CurrentTabsView() {
   const { tabs, isLoading } = useChromeTabs();
   const { groups } = useTabGroups();
+  const profiles = useProfileStore((s) => s.profiles);
+
+  // URL → 프로필 커스텀 이름 매핑 (최신 프로필 우선)
+  const profileTitleMap = useMemo(() => {
+    const map = new Map<string, { title: string; profileName: string }>();
+    const sorted = [...profiles].sort((a, b) => b.updatedAt - a.updatedAt);
+    for (const profile of sorted) {
+      for (const group of profile.groups) {
+        for (const tab of group.tabs) {
+          if (!tab.url) continue;
+          const key = normalizeUrl(tab.url);
+          if (!map.has(key) && tab.title) {
+            map.set(key, { title: tab.title, profileName: profile.name });
+          }
+        }
+      }
+    }
+    return map;
+  }, [profiles]);
 
   if (isLoading) {
     return (
@@ -58,6 +79,7 @@ export default function CurrentTabsView() {
             <TabItem
               key={tab.id}
               tab={tab}
+              profileTitleMap={profileTitleMap}
               onClick={() => tab.id && handleTabClick(tab.id)}
               onClose={() => tab.id && handleTabClose(tab.id)}
             />
@@ -79,6 +101,7 @@ export default function CurrentTabsView() {
               <TabItem
                 key={tab.id}
                 tab={tab}
+                profileTitleMap={profileTitleMap}
                 onClick={() => tab.id && handleTabClick(tab.id)}
                 onClose={() => tab.id && handleTabClose(tab.id)}
               />
@@ -94,6 +117,7 @@ export default function CurrentTabsView() {
             <TabItem
               key={tab.id}
               tab={tab}
+              profileTitleMap={profileTitleMap}
               onClick={() => tab.id && handleTabClick(tab.id)}
               onClose={() => tab.id && handleTabClose(tab.id)}
             />
@@ -146,22 +170,33 @@ function GroupSection({
 
 function TabItem({
   tab,
+  profileTitleMap,
   onClick,
   onClose,
 }: {
   tab: chrome.tabs.Tab;
+  profileTitleMap: Map<string, { title: string; profileName: string }>;
   onClick: () => void;
   onClose: () => void;
 }) {
+  // 프로필 커스텀 이름 매칭
+  const profileMatch = tab.url ? profileTitleMap.get(normalizeUrl(tab.url)) : undefined;
+  const displayTitle = profileMatch?.title ?? tab.title ?? tab.url;
+
   return (
     <div
       className="flex items-center gap-2 px-3 py-1 mx-1 rounded hover:bg-white/60 dark:hover:bg-gray-700/40 cursor-pointer group"
       onClick={onClick}
     >
       <FavIcon url={tab.favIconUrl} />
-      <span className="text-xs truncate flex-1" title={tab.title}>
-        {tab.title || tab.url}
+      <span className="text-xs truncate flex-1" title={profileMatch ? `프로필 "${profileMatch.profileName}"의 커스텀 이름\n원본: ${tab.title}` : tab.title}>
+        {displayTitle}
       </span>
+      {profileMatch && profileMatch.title !== tab.title && (
+        <span className="text-[10px] text-blue-500 flex-shrink-0" title={`프로필: ${profileMatch.profileName}`}>
+          P
+        </span>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();

@@ -16,6 +16,9 @@ interface EditorState {
   setCurrentProfile: (profile: Profile) => void;
   selectItem: (id: string | null, type: 'group' | 'tab' | null) => void;
 
+  // 프로필
+  renameProfile: (name: string) => void;
+
   // 그룹 CRUD
   addGroup: (group: Omit<Group, 'id' | 'tabs'>) => void;
   updateGroup: (groupId: string, updates: Partial<Omit<Group, 'id' | 'tabs'>>) => void;
@@ -76,6 +79,15 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
   selectItem: (id, type) => {
     set({ selectedItemId: id, selectedItemType: type });
+  },
+
+  // ── 프로필 ──
+
+  renameProfile: (name) => {
+    withHistory(get, set, (p) => {
+      p.name = name;
+      return p;
+    });
   },
 
   // ── 그룹 CRUD ──
