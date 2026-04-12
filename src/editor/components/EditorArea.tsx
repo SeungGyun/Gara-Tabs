@@ -22,17 +22,17 @@ import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
 import DraggableStandaloneTab from './DraggableStandaloneTab';
 
-// ── 그룹 사이 드롭 갭 (높이 고정, 색상만 변경) ──
+// ── 아이템 사이 갭 (space-y-3 대체, 항상 고정 높이) ──
 
-function DropGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
+function ItemGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraggingTab });
 
   return (
     <div
       ref={setNodeRef}
-      className={`h-3 rounded transition-colors ${
+      className={`h-3 rounded-sm transition-colors duration-150 ${
         isDraggingTab && isOver
-          ? 'bg-blue-200 dark:bg-blue-800/50 border border-dashed border-blue-400'
+          ? 'bg-blue-400 dark:bg-blue-500'
           : ''
       }`}
     />
@@ -70,7 +70,6 @@ export default function EditorArea() {
 
   const allItems = currentProfile.items;
 
-  // 검색 필터
   const items = searchQuery
     ? allItems.filter((item) => {
         const q = searchQuery.toLowerCase();
@@ -84,12 +83,10 @@ export default function EditorArea() {
       })
     : allItems;
 
-  // 최상위 정렬 ID
   const topLevelIds = items.map((item) =>
     item.kind === 'group' ? `g-${item.group.id}` : `st-${item.tab.id}`,
   );
 
-  // 탭 드래그 중인지 여부 (그룹이 아닌 탭을 드래그할 때만 갭 표시)
   const isDraggingTab = activeType === 'tab' || activeType === 'standalone-tab';
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -106,20 +103,18 @@ export default function EditorArea() {
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const activeIdStr = event.active.id as string;
-    // 그룹 드래그 중이면 drop-into 무시
     if (activeIdStr.startsWith('g-')) {
       setDropIntoGroupId(null);
       return;
     }
     const overId = event.over?.id as string | undefined;
-    // 갭 위에 있으면 drop-into 해제
+    // 갭 위 → drop-into 해제
     if (overId?.startsWith('gap-')) {
       setDropIntoGroupId(null);
       return;
     }
     if (overId?.startsWith('g-')) {
       const groupId = overId.slice(2);
-      // 그룹 내 탭이 자기 그룹 위에 있으면 무시
       if (!activeIdStr.startsWith('st-')) {
         for (const item of allItems) {
           if (item.kind === 'group' && item.group.id === groupId) {
@@ -151,17 +146,15 @@ export default function EditorArea() {
 
     if (activeIdStr === overIdStr) return;
 
-    // ── Gap drop: 탭을 그룹 사이 갭에 드롭 → 독립 탭으로 삽입 ──
+    // ── 갭에 드롭 → 독립 탭으로 삽입 ──
     if (overIdStr.startsWith('gap-')) {
       const gapIndex = parseInt(overIdStr.slice(4));
-      // gapIndex는 items 배열에서의 삽입 위치
       const realInsertIndex = gapIndex < items.length
         ? allItems.indexOf(items[gapIndex])
         : allItems.length;
       if (realInsertIndex < 0) return;
 
       if (activeIdStr.startsWith('st-')) {
-        // 독립 탭 → 갭 위치로 이동 (reorder)
         const tabId = activeIdStr.slice(3);
         const fromItem = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
         if (fromItem) {
@@ -169,7 +162,6 @@ export default function EditorArea() {
           if (realFrom >= 0) reorderItems(realFrom, realInsertIndex > realFrom ? realInsertIndex - 1 : realInsertIndex);
         }
       } else if (!activeIdStr.startsWith('g-')) {
-        // 그룹 내 탭 → 독립 탭으로 추출
         const tabId = activeIdStr;
         let fromGroupId = '';
         for (const item of allItems) {
@@ -185,12 +177,11 @@ export default function EditorArea() {
       return;
     }
 
-    // Case 1: Drop into group (tab or standalone-tab → group header)
+    // ── 그룹 헤더에 드롭 → 그룹 안으로 ──
     if (currentDropIntoGroupId || overIdStr.startsWith('g-')) {
       const targetGroupId = currentDropIntoGroupId ?? overIdStr.slice(2);
 
       if (activeIdStr.startsWith('st-')) {
-        // 독립 탭 → 그룹
         const tabId = activeIdStr.slice(3);
         const targetGroup = allItems.find(
           (i) => i.kind === 'group' && i.group.id === targetGroupId,
@@ -199,7 +190,6 @@ export default function EditorArea() {
           moveTabToGroup(tabId, targetGroupId, targetGroup.group.tabs.length);
         }
       } else if (!activeIdStr.startsWith('g-')) {
-        // 그룹 내 탭 → 다른 그룹
         const tabId = activeIdStr;
         let fromGroupId = '';
         for (const item of allItems) {
@@ -220,7 +210,7 @@ export default function EditorArea() {
       return;
     }
 
-    // Case 2: Top-level item reorder (group ↔ standalone-tab)
+    // ── Top-level reorder ──
     if (
       (activeIdStr.startsWith('g-') || activeIdStr.startsWith('st-')) &&
       (overIdStr.startsWith('g-') || overIdStr.startsWith('st-'))
@@ -239,7 +229,7 @@ export default function EditorArea() {
       return;
     }
 
-    // Case 3: Group-internal tab → standalone tab 위치로 이동
+    // ── 그룹 내 탭 → 독립 탭 위로 이동 ──
     if (
       !activeIdStr.startsWith('g-') && !activeIdStr.startsWith('st-') &&
       overIdStr.startsWith('st-')
@@ -253,19 +243,15 @@ export default function EditorArea() {
         }
       }
       if (!fromGroupId) return;
-
       const overTopIdx = topLevelIds.indexOf(overIdStr);
       if (overTopIdx >= 0) {
-        const overItem = items[overTopIdx];
-        const realTo = allItems.indexOf(overItem);
-        if (realTo >= 0) {
-          moveTabToStandalone(fromGroupId, tabId, realTo);
-        }
+        const realTo = allItems.indexOf(items[overTopIdx]);
+        if (realTo >= 0) moveTabToStandalone(fromGroupId, tabId, realTo);
       }
       return;
     }
 
-    // Case 4: Standalone tab → group-internal tab (joins that group)
+    // ── 독립 탭 → 그룹 내 탭 위에 드롭 ──
     if (
       activeIdStr.startsWith('st-') &&
       !overIdStr.startsWith('g-') && !overIdStr.startsWith('st-')
@@ -283,7 +269,7 @@ export default function EditorArea() {
       return;
     }
 
-    // Case 5: Tab reorder within/between groups
+    // ── 탭 간 이동 (같은/다른 그룹) ──
     if (!activeIdStr.startsWith('g-') && !activeIdStr.startsWith('st-')) {
       const tabId = activeIdStr;
       let fromGroupId = '';
@@ -293,7 +279,6 @@ export default function EditorArea() {
           break;
         }
       }
-
       if (!fromGroupId) return;
 
       let toGroupId = '';
@@ -305,11 +290,8 @@ export default function EditorArea() {
           }
         }
       }
-
       if (fromGroupId && toGroupId) {
-        const toGroup = allItems.find(
-          (i) => i.kind === 'group' && i.group.id === toGroupId,
-        );
+        const toGroup = allItems.find((i) => i.kind === 'group' && i.group.id === toGroupId);
         if (toGroup && toGroup.kind === 'group') {
           let newIndex = toGroup.group.tabs.length;
           const overTabIdx = toGroup.group.tabs.findIndex((t) => t.id === overIdStr);
@@ -379,10 +361,11 @@ export default function EditorArea() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
+          {/* space-y-3 제거 — ItemGap이 동일한 간격을 담당 */}
           <div>
             {items.map((item, index) => (
               <Fragment key={item.kind === 'group' ? item.group.id : item.tab.id}>
-                <DropGap id={`gap-${index}`} isDraggingTab={isDraggingTab} />
+                <ItemGap id={`gap-${index}`} isDraggingTab={isDraggingTab} />
                 {item.kind === 'group' ? (
                   <DraggableGroup
                     group={item.group}
@@ -393,7 +376,7 @@ export default function EditorArea() {
                 )}
               </Fragment>
             ))}
-            <DropGap id={`gap-${items.length}`} isDraggingTab={isDraggingTab} />
+            <ItemGap id={`gap-${items.length}`} isDraggingTab={isDraggingTab} />
           </div>
         </SortableContext>
 

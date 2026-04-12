@@ -25,22 +25,21 @@ import { COLOR_MAP_LIGHT, COLOR_MAP } from '../../shared/utils/colors';
 import { normalizeUrl } from '../../shared/utils/dedup';
 import {
   buildSegments as buildSegmentsPure,
-  computeTabToGroupTarget,
   type SimpleTab,
 } from '../../shared/utils/tabDragLogic';
 import type { ChromeTabGroupColor } from '../../shared/types';
 
-// ── 그룹 사이 드롭 갭 (높이 고정, 색상만 변경) ──
+// ── 아이템 사이 갭 (기존 간격 대체, 항상 고정 높이) ──
 
-function DropGap({ id, isActive }: { id: string; isActive: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isActive });
+function ItemGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraggingTab });
 
   return (
     <div
       ref={setNodeRef}
-      className={`h-1.5 mx-1 rounded transition-colors ${
-        isActive && isOver
-          ? 'bg-blue-200 dark:bg-blue-800/50 border border-dashed border-blue-400'
+      className={`h-1 rounded-sm transition-colors duration-150 ${
+        isDraggingTab && isOver
+          ? 'bg-blue-400 dark:bg-blue-500'
           : ''
       }`}
     />
@@ -103,7 +102,6 @@ export default function CurrentTabsView() {
     return buildSegmentsPure(simpleTabs, groupIds);
   }, [tabs, groups]);
 
-  // tabId → { index, groupId }
   const tabLookup = useMemo(() => {
     const map = new Map<number, { index: number; groupId: number }>();
     for (const tab of tabs) {
@@ -114,12 +112,19 @@ export default function CurrentTabsView() {
     return map;
   }, [tabs]);
 
-  // 최상위 정렬 ID (그룹 + 미분류 탭, 고정 탭 제외)
   const topLevelIds = useMemo(() => {
     return segments
       .filter((s) => s.kind !== 'pinned')
       .map((s) => (s.kind === 'group' ? `g-${s.groupId}` : `t-${s.tab.id}`));
   }, [segments]);
+
+  const nonPinnedSegments = useMemo(() => {
+    return segments.filter((s) => s.kind !== 'pinned');
+  }, [segments]);
+
+  const isDraggingTab = useMemo(() => {
+    return activeId != null && activeId.startsWith('t-');
+  }, [activeId]);
 
   const handleMoveTab = useCallback(
     async (tabId: number, targetIndex: number, targetGroupId?: number) => {
@@ -158,13 +163,12 @@ export default function CurrentTabsView() {
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const activeIdStr = event.active.id as string;
-      // 탭 드래그가 아니면 drop-into 무시
       if (!activeIdStr.startsWith('t-')) {
         setDropIntoGroupId(null);
         return;
       }
       const overId = event.over?.id as string | undefined;
-      // 갭 위에 있으면 drop-into 해제
+      // 갭 위 → drop-into 해제
       if (overId?.startsWith('gap-')) {
         setDropIntoGroupId(null);
         return;
@@ -173,7 +177,6 @@ export default function CurrentTabsView() {
         const groupId = parseInt(overId.slice(2));
         const activeTabId = parseInt(activeIdStr.slice(2));
         const tabInfo = tabLookup.get(activeTabId);
-        // 같은 그룹 내에서는 drop-into 하지 않음
         if (tabInfo && tabInfo.groupId !== groupId) {
           setDropIntoGroupId(groupId);
           return;
@@ -183,16 +186,6 @@ export default function CurrentTabsView() {
     },
     [tabLookup, setDropIntoGroupId],
   );
-
-  // 현재 탭 드래그 중인지 (갭 표시용)
-  const isDraggingTab = useMemo(() => {
-    return activeId != null && activeId.startsWith('t-');
-  }, [activeId]);
-
-  // non-pinned segments for gap indexing
-  const nonPinnedSegments = useMemo(() => {
-    return segments.filter((s) => s.kind !== 'pinned');
-  }, [segments]);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -208,18 +201,16 @@ export default function CurrentTabsView() {
       const overIdStr = over.id as string;
       const isActiveGroup = activeIdStr.startsWith('g-');
 
-      // ── Gap drop: 탭을 그룹 사이 갭에 드롭 → 미분류로 이동 ──
+      // ── 갭에 드롭 → 미분류로 이동 ──
       if (overIdStr.startsWith('gap-') && !isActiveGroup) {
         const gapIndex = parseInt(overIdStr.slice(4));
         const activeTabId = parseInt(activeIdStr.slice(2));
 
-        // gapIndex에 해당하는 Chrome 탭 인덱스 계산
         let targetIndex: number;
         if (gapIndex < nonPinnedSegments.length) {
           const seg = nonPinnedSegments[gapIndex];
           targetIndex = seg.kind === 'group' ? seg.tabs[0].index : seg.tab.index;
         } else {
-          // 마지막 갭 → 마지막 세그먼트의 마지막 탭 뒤
           const lastSeg = nonPinnedSegments[nonPinnedSegments.length - 1];
           if (!lastSeg) return;
           targetIndex = lastSeg.kind === 'group'
@@ -227,31 +218,29 @@ export default function CurrentTabsView() {
             : lastSeg.tab.index + 1;
         }
 
-        // groupId -1 = ungroup
         handleMoveTab(activeTabId, targetIndex, -1);
         return;
       }
 
       if (!isActiveGroup) {
-        // ── 탭 이동 ──
         const activeTabId = parseInt(activeIdStr.slice(2));
         const activeTab = tabLookup.get(activeTabId);
         if (!activeTab) return;
 
-        // Case 1: 그룹 안으로 드롭
+        // 그룹 헤더에 드롭 → 그룹 안으로
         if (currentDropIntoGroupId != null || overIdStr.startsWith('g-')) {
           const targetGroupId = currentDropIntoGroupId ?? parseInt(overIdStr.slice(2));
           const segment = segments.find(
             (s) => s.kind === 'group' && s.groupId === targetGroupId,
           );
           if (segment && segment.kind === 'group') {
-            const result = computeTabToGroupTarget(segment.tabs, 'into');
-            handleMoveTab(activeTabId, result.targetIndex, result.targetGroupId);
+            const lastIdx = segment.tabs[segment.tabs.length - 1].index;
+            handleMoveTab(activeTabId, lastIdx + 1, targetGroupId);
           }
           return;
         }
 
-        // Case 2: 탭 → 탭 이동
+        // 탭 → 탭 이동
         const overTabId = parseInt(overIdStr.slice(2));
         const overTab = tabLookup.get(overTabId);
         if (!overTab) return;
@@ -261,11 +250,10 @@ export default function CurrentTabsView() {
         const targetIndex = pos === 'after' ? overTab.index + 1 : overTab.index;
         handleMoveTab(activeTabId, targetIndex, targetGroupId);
       } else {
-        // ── 그룹 이동 ──
+        // 그룹 이동
         const activeGroupId = parseInt(activeIdStr.slice(2));
 
         if (overIdStr.startsWith('g-')) {
-          // 그룹 → 그룹
           const overGroupId = parseInt(overIdStr.slice(2));
           const overSegment = segments.find(
             (s) => s.kind === 'group' && s.groupId === overGroupId,
@@ -279,7 +267,6 @@ export default function CurrentTabsView() {
               : overSegment.tabs[0].index;
           handleMoveGroup(activeGroupId, targetIdx);
         } else {
-          // 그룹 → 미분류 탭 위치
           const overTabId = parseInt(overIdStr.slice(2));
           const overTab = tabLookup.get(overTabId);
           if (!overTab) return;
@@ -314,7 +301,7 @@ export default function CurrentTabsView() {
   }
 
   return (
-    <div className="p-2 space-y-1">
+    <div className="p-2">
       <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">{tabs.length}개 탭</div>
 
       <DndContext
@@ -325,6 +312,7 @@ export default function CurrentTabsView() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
+          {/* 고정 탭 섹션 */}
           {segments.map((segment) => {
             if (segment.kind === 'pinned') {
               const chromeTabs = segment.tabs
@@ -347,7 +335,7 @@ export default function CurrentTabsView() {
             return null;
           })}
 
-          {/* 그룹/탭 사이에 갭 드롭존 삽입 */}
+          {/* 그룹/탭 + 갭 */}
           {nonPinnedSegments.map((segment, npIndex) => {
             if (segment.kind === 'group') {
               const group = groupMap.get(segment.groupId);
@@ -359,7 +347,7 @@ export default function CurrentTabsView() {
 
               return (
                 <Fragment key={`group-${group.id}`}>
-                  <DropGap id={`gap-${npIndex}`} isActive={isDraggingTab} />
+                  <ItemGap id={`gap-${npIndex}`} isDraggingTab={isDraggingTab} />
                   <SortableGroupSection
                     groupId={group.id}
                     title={group.title || '그룹'}
@@ -385,12 +373,11 @@ export default function CurrentTabsView() {
               );
             }
 
-            // ungrouped
             const chromeTab = tabs.find((t) => t.id === segment.tab.id);
             if (!chromeTab) return null;
             return (
               <Fragment key={`standalone-${chromeTab.id}`}>
-                <DropGap id={`gap-${npIndex}`} isActive={isDraggingTab} />
+                <ItemGap id={`gap-${npIndex}`} isDraggingTab={isDraggingTab} />
                 <SortableStandaloneTab
                   tab={chromeTab}
                   profileTitleMap={profileTitleMap}
@@ -400,8 +387,7 @@ export default function CurrentTabsView() {
               </Fragment>
             );
           })}
-          {/* 마지막 갭 */}
-          <DropGap id={`gap-${nonPinnedSegments.length}`} isActive={isDraggingTab} />
+          <ItemGap id={`gap-${nonPinnedSegments.length}`} isDraggingTab={isDraggingTab} />
         </SortableContext>
 
         <DragOverlay>
@@ -431,7 +417,7 @@ export default function CurrentTabsView() {
   );
 }
 
-// ── 고정 탭 섹션 (드래그 불가) ──
+// ── 고정 탭 섹션 ──
 
 function PinnedSection({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -656,7 +642,7 @@ function SortableStandaloneTab({
   );
 }
 
-// ── 정적 탭 (고정 탭용, 드래그 불가) ──
+// ── 정적 탭 ──
 
 function StaticTabItem({
   tab,
@@ -710,7 +696,7 @@ function StaticTabItem({
   );
 }
 
-// ── 파비콘 컴포넌트 ──
+// ── 파비콘 ──
 
 function FavIcon({ url }: { url?: string | null }) {
   if (!url) {
