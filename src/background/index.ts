@@ -269,6 +269,11 @@ async function createProfileTabs(
           await chrome.tabs.ungroup(existing.id);
         }
         reusedTabIds.add(existing.id);
+        // 재사용 탭을 순차 위치로 이동 (그룹 내부 순서 보장)
+        if (!tab.pinned) {
+          await chrome.tabs.move(existing.id, { index: nextIndex });
+        }
+        nextIndex++;
         return existing.id;
       } catch {
         // 탭이 사라진 경우 새로 생성으로 fallback
