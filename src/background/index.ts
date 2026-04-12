@@ -191,25 +191,34 @@ async function loadProfile(
     const currentWindow = await chrome.windows.getCurrent();
     const existingTabs = await chrome.tabs.query({ windowId: currentWindow.id });
 
+    // 기존 탭 재사용 맵: normalizeUrl → 첫 번째 매칭 탭
+    const existingTabMap = new Map<string, chrome.tabs.Tab>();
+    for (const tab of existingTabs) {
+      if (!tab.url || !tab.id) continue;
+      const norm = normalizeUrl(tab.url);
+      if (!existingTabMap.has(norm)) {
+        existingTabMap.set(norm, tab);
+      }
+    }
+
+    // 프로필 탭 생성/재사용
+    const reusedTabIds = await createProfileTabs(profile, currentWindow.id!, existingTabMap);
+
+    // 재사용되지 않은 기존 탭 = leftover
+    const leftoverTabs = existingTabs.filter((t) => t.id && !reusedTabIds.has(t.id!));
+
     if (option === 'close_existing') {
-      // 프로필 탭 생성 (기존 탭 뒤에 순서대로)
-      await createProfileTabs(profile, currentWindow.id!);
-      // 기존 탭 닫기
-      const idsToClose = existingTabs.map((t) => t.id!).filter(Boolean);
+      const idsToClose = leftoverTabs.map((t) => t.id!).filter(Boolean);
       if (idsToClose.length) await chrome.tabs.remove(idsToClose);
     } else if (option === 'keep_as_group') {
-      // 프로필 탭 먼저 생성
-      await createProfileTabs(profile, currentWindow.id!);
-
-      // 기존 탭(비고정)을 맨 뒤로 이동 후 그룹으로 묶기
-      const existingIds = existingTabs
+      const leftoverIds = leftoverTabs
         .filter((t) => !t.pinned && t.id)
         .map((t) => t.id!);
 
-      if (existingIds.length > 0) {
-        await chrome.tabs.move(existingIds, { index: -1 });
+      if (leftoverIds.length > 0) {
+        await chrome.tabs.move(leftoverIds, { index: -1 });
         const gid = await chrome.tabs.group({
-          tabIds: existingIds,
+          tabIds: leftoverIds,
           createProperties: { windowId: currentWindow.id },
         });
         await chrome.tabGroups.update(gid, {
@@ -229,13 +238,60 @@ async function loadProfile(
 async function createProfileTabs(
   profile: Profile,
   windowId: number,
-  skipUrls?: Set<string>,
-) {
+  existingTabMap?: Map<string, chrome.tabs.Tab>,
+): Promise<Set<number>> {
+  const reusedTabIds = new Set<number>();
+
   // 현재 탭 수를 기준으로 뒤에 순서대로 배치
   const currentTabs = await chrome.tabs.query({ windowId });
   let nextIndex = currentTabs.length;
 
-  // Phase 1: 모든 탭을 순서대로 생성 (그룹 묶기는 나중에)
+  // 기존 탭 재사용: normalizeUrl로 매칭, 매칭되면 재사용하고 맵에서 제거
+  async function reuseOrCreate(
+    tab: { url: string; pinned: boolean },
+  ): Promise<number | undefined> {
+    const normUrl = normalizeUrl(tab.url);
+    const existing = existingTabMap?.get(normUrl);
+
+    if (existing?.id) {
+      // 맵에서 소비 (같은 URL의 다음 프로필 탭은 새로 생성)
+      existingTabMap!.delete(normUrl);
+
+      try {
+        // 탭이 아직 존재하는지 확인 (레이스 컨디션 방어)
+        await chrome.tabs.get(existing.id);
+        // pinned 상태 동기화
+        if (existing.pinned !== tab.pinned) {
+          await chrome.tabs.update(existing.id, { pinned: tab.pinned });
+        }
+        // 기존 그룹에서 분리 (Phase 2에서 새 그룹에 배정)
+        if (existing.groupId !== undefined && existing.groupId !== -1) {
+          await chrome.tabs.ungroup(existing.id);
+        }
+        reusedTabIds.add(existing.id);
+        return existing.id;
+      } catch {
+        // 탭이 사라진 경우 새로 생성으로 fallback
+      }
+    }
+
+    // 매칭 없으면 새로 생성
+    try {
+      const newTab = await chrome.tabs.create({
+        url: tab.url,
+        windowId,
+        active: false,
+        pinned: tab.pinned,
+        index: tab.pinned ? undefined : nextIndex,
+      });
+      nextIndex++;
+      return newTab.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Phase 1: 모든 탭을 순서대로 생성 또는 재사용 (그룹 묶기는 나중에)
   const groupingTasks: { tabIds: number[]; name: string; color: string }[] = [];
   // 프로필 아이템 순서 추적 (Phase 3에서 순서 보정용)
   const orderItems: ({ kind: 'tab'; tabId: number } | { kind: 'group'; groupIdx: number })[] = [];
@@ -244,41 +300,18 @@ async function createProfileTabs(
     if (item.kind === 'tab') {
       const tab = item.tab;
       if (!tab.url || tab.url === '') continue;
-      if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
-      try {
-        const newTab = await chrome.tabs.create({
-          url: tab.url,
-          windowId,
-          active: false,
-          pinned: tab.pinned,
-          index: tab.pinned ? undefined : nextIndex,
-        });
-        if (newTab.id) orderItems.push({ kind: 'tab', tabId: newTab.id });
-        nextIndex++;
-      } catch {
-        // URL 열기 실패 시 스킵
-      }
+
+      const tabId = await reuseOrCreate(tab);
+      if (tabId) orderItems.push({ kind: 'tab', tabId });
     } else {
       const group = item.group;
       const createdTabIds: number[] = [];
 
       for (const tab of group.tabs) {
         if (!tab.url || tab.url === '') continue;
-        if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
 
-        try {
-          const newTab = await chrome.tabs.create({
-            url: tab.url,
-            windowId,
-            active: false,
-            pinned: tab.pinned,
-            index: nextIndex,
-          });
-          if (newTab.id) createdTabIds.push(newTab.id);
-          nextIndex++;
-        } catch {
-          // URL 열기 실패 시 스킵
-        }
+        const tabId = await reuseOrCreate(tab);
+        if (tabId) createdTabIds.push(tabId);
       }
 
       if (createdTabIds.length > 0) {
@@ -324,6 +357,8 @@ async function createProfileTabs(
       // 이동 실패 스킵
     }
   }
+
+  return reusedTabIds;
 }
 
 // ===== 중복 탭 제거 =====
