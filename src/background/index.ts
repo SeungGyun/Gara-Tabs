@@ -192,18 +192,22 @@ async function loadProfile(
     const existingTabs = await chrome.tabs.query({ windowId: currentWindow.id });
 
     if (option === 'close_existing') {
-      // 프로필 탭 먼저 생성
+      // 프로필 탭 생성 (기존 탭 뒤에 순서대로)
       await createProfileTabs(profile, currentWindow.id!);
       // 기존 탭 닫기
       const idsToClose = existingTabs.map((t) => t.id!).filter(Boolean);
       if (idsToClose.length) await chrome.tabs.remove(idsToClose);
     } else if (option === 'keep_as_group') {
-      // 기존 탭을 하나의 그룹으로 묶기
+      // 프로필 탭 먼저 생성
+      await createProfileTabs(profile, currentWindow.id!);
+
+      // 기존 탭(비고정)을 맨 뒤로 이동 후 그룹으로 묶기
       const existingIds = existingTabs
         .filter((t) => !t.pinned && t.id)
         .map((t) => t.id!);
 
       if (existingIds.length > 0) {
+        await chrome.tabs.move(existingIds, { index: -1 });
         const gid = await chrome.tabs.group({
           tabIds: existingIds,
           createProperties: { windowId: currentWindow.id },
@@ -214,9 +218,6 @@ async function loadProfile(
           collapsed: true,
         });
       }
-
-      // 프로필 탭 전부 열기 (중복 무시)
-      await createProfileTabs(profile, currentWindow.id!);
     }
 
     return { success: true };
@@ -230,24 +231,34 @@ async function createProfileTabs(
   windowId: number,
   skipUrls?: Set<string>,
 ) {
+  // 현재 탭 수를 기준으로 뒤에 순서대로 배치
+  const currentTabs = await chrome.tabs.query({ windowId });
+  let nextIndex = currentTabs.length;
+
+  // Phase 1: 모든 탭을 순서대로 생성 (그룹 묶기는 나중에)
+  const groupingTasks: { tabIds: number[]; name: string; color: string }[] = [];
+  // 프로필 아이템 순서 추적 (Phase 3에서 순서 보정용)
+  const orderItems: ({ kind: 'tab'; tabId: number } | { kind: 'group'; groupIdx: number })[] = [];
+
   for (const item of profile.items) {
     if (item.kind === 'tab') {
-      // 독립 탭 생성 (고정 탭 포함)
       const tab = item.tab;
       if (!tab.url || tab.url === '') continue;
       if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
       try {
-        await chrome.tabs.create({
+        const newTab = await chrome.tabs.create({
           url: tab.url,
           windowId,
           active: false,
           pinned: tab.pinned,
+          index: tab.pinned ? undefined : nextIndex,
         });
+        if (newTab.id) orderItems.push({ kind: 'tab', tabId: newTab.id });
+        nextIndex++;
       } catch {
         // URL 열기 실패 시 스킵
       }
     } else {
-      // 그룹 탭 생성
       const group = item.group;
       const createdTabIds: number[] = [];
 
@@ -261,28 +272,56 @@ async function createProfileTabs(
             windowId,
             active: false,
             pinned: tab.pinned,
+            index: nextIndex,
           });
           if (newTab.id) createdTabIds.push(newTab.id);
+          nextIndex++;
         } catch {
           // URL 열기 실패 시 스킵
         }
       }
 
-      // 그룹 묶기
       if (createdTabIds.length > 0) {
-        try {
-          const gid = await chrome.tabs.group({
-            tabIds: createdTabIds,
-            createProperties: { windowId },
-          });
-          await chrome.tabGroups.update(gid, {
-            title: group.name,
-            color: group.color as chrome.tabGroups.ColorEnum,
-          });
-        } catch {
-          // 그룹화 실패 스킵
-        }
+        orderItems.push({ kind: 'group', groupIdx: groupingTasks.length });
+        groupingTasks.push({
+          tabIds: createdTabIds,
+          name: group.name,
+          color: group.color,
+        });
       }
+    }
+  }
+
+  // Phase 2: 탭이 모두 배치된 후 그룹 묶기
+  const groupGids: (number | null)[] = [];
+  for (const task of groupingTasks) {
+    try {
+      const gid = await chrome.tabs.group({
+        tabIds: task.tabIds,
+        createProperties: { windowId },
+      });
+      await chrome.tabGroups.update(gid, {
+        title: task.name,
+        color: task.color as chrome.tabGroups.ColorEnum,
+      });
+      groupGids.push(gid);
+    } catch {
+      groupGids.push(null);
+    }
+  }
+
+  // Phase 3: chrome.tabs.group()이 위치를 재배치할 수 있으므로
+  // 프로필 순서대로 그룹과 독립 탭 모두 명시적으로 재배치
+  for (const item of orderItems) {
+    try {
+      if (item.kind === 'group') {
+        const gid = groupGids[item.groupIdx];
+        if (gid != null) await chrome.tabGroups.move(gid, { index: -1 });
+      } else {
+        await chrome.tabs.move(item.tabId, { index: -1 });
+      }
+    } catch {
+      // 이동 실패 스킵
     }
   }
 }
