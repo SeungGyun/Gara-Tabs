@@ -3,6 +3,7 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -11,7 +12,19 @@ import {
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
+
+// 탭/갭을 그룹 헤더보다 우선 감지 — 그룹 내 위치 지정 가능
+const preferInnerTarget: CollisionDetection = (args) => {
+  const pw = pointerWithin(args);
+  if (pw.length > 0) {
+    const nonGroup = pw.filter((c) => !String(c.id).startsWith('g-'));
+    if (nonGroup.length > 0) return nonGroup;
+    return pw;
+  }
+  return closestCenter(args);
+};
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -355,7 +368,7 @@ export default function EditorArea() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={preferInnerTarget}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
