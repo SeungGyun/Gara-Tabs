@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, Fragment } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -7,6 +7,7 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
+  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -28,6 +29,23 @@ import {
   type SimpleTab,
 } from '../../shared/utils/tabDragLogic';
 import type { ChromeTabGroupColor } from '../../shared/types';
+
+// ── 그룹 사이 드롭 갭 (높이 고정, 색상만 변경) ──
+
+function DropGap({ id, isActive }: { id: string; isActive: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isActive });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`h-1.5 mx-1 rounded transition-colors ${
+        isActive && isOver
+          ? 'bg-blue-200 dark:bg-blue-800/50 border border-dashed border-blue-400'
+          : ''
+      }`}
+    />
+  );
+}
 
 // ── 메인 컴포넌트 ──
 
@@ -146,6 +164,11 @@ export default function CurrentTabsView() {
         return;
       }
       const overId = event.over?.id as string | undefined;
+      // 갭 위에 있으면 drop-into 해제
+      if (overId?.startsWith('gap-')) {
+        setDropIntoGroupId(null);
+        return;
+      }
       if (overId?.startsWith('g-')) {
         const groupId = parseInt(overId.slice(2));
         const activeTabId = parseInt(activeIdStr.slice(2));
@@ -161,6 +184,16 @@ export default function CurrentTabsView() {
     [tabLookup, setDropIntoGroupId],
   );
 
+  // 현재 탭 드래그 중인지 (갭 표시용)
+  const isDraggingTab = useMemo(() => {
+    return activeId != null && activeId.startsWith('t-');
+  }, [activeId]);
+
+  // non-pinned segments for gap indexing
+  const nonPinnedSegments = useMemo(() => {
+    return segments.filter((s) => s.kind !== 'pinned');
+  }, [segments]);
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -174,6 +207,30 @@ export default function CurrentTabsView() {
       const activeIdStr = active.id as string;
       const overIdStr = over.id as string;
       const isActiveGroup = activeIdStr.startsWith('g-');
+
+      // ── Gap drop: 탭을 그룹 사이 갭에 드롭 → 미분류로 이동 ──
+      if (overIdStr.startsWith('gap-') && !isActiveGroup) {
+        const gapIndex = parseInt(overIdStr.slice(4));
+        const activeTabId = parseInt(activeIdStr.slice(2));
+
+        // gapIndex에 해당하는 Chrome 탭 인덱스 계산
+        let targetIndex: number;
+        if (gapIndex < nonPinnedSegments.length) {
+          const seg = nonPinnedSegments[gapIndex];
+          targetIndex = seg.kind === 'group' ? seg.tabs[0].index : seg.tab.index;
+        } else {
+          // 마지막 갭 → 마지막 세그먼트의 마지막 탭 뒤
+          const lastSeg = nonPinnedSegments[nonPinnedSegments.length - 1];
+          if (!lastSeg) return;
+          targetIndex = lastSeg.kind === 'group'
+            ? lastSeg.tabs[lastSeg.tabs.length - 1].index + 1
+            : lastSeg.tab.index + 1;
+        }
+
+        // groupId -1 = ungroup
+        handleMoveTab(activeTabId, targetIndex, -1);
+        return;
+      }
 
       if (!isActiveGroup) {
         // ── 탭 이동 ──
@@ -233,7 +290,7 @@ export default function CurrentTabsView() {
         }
       }
     },
-    [segments, tabLookup, topLevelIds, handleMoveTab, handleMoveGroup, setDropIntoGroupId],
+    [segments, nonPinnedSegments, tabLookup, topLevelIds, handleMoveTab, handleMoveGroup, setDropIntoGroupId],
   );
 
   // ── DragOverlay 데이터 ──
@@ -287,7 +344,11 @@ export default function CurrentTabsView() {
                 </PinnedSection>
               );
             }
+            return null;
+          })}
 
+          {/* 그룹/탭 사이에 갭 드롭존 삽입 */}
+          {nonPinnedSegments.map((segment, npIndex) => {
             if (segment.kind === 'group') {
               const group = groupMap.get(segment.groupId);
               if (!group) return null;
@@ -297,28 +358,30 @@ export default function CurrentTabsView() {
               const tabIds = segment.tabs.map((st) => `t-${st.id}`);
 
               return (
-                <SortableGroupSection
-                  key={`group-${group.id}`}
-                  groupId={group.id}
-                  title={group.title || '그룹'}
-                  color={(group.color as ChromeTabGroupColor) ?? 'grey'}
-                  tabCount={groupTabs.length}
-                  collapsed={group.collapsed}
-                  isDropTarget={dropIntoGroupId === group.id}
-                  onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
-                >
-                  <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
-                    {groupTabs.map((tab) => (
-                      <SortableTabItem
-                        key={tab.id}
-                        tab={tab}
-                        profileTitleMap={profileTitleMap}
-                        onClick={() => tab.id && handleTabClick(tab.id)}
-                        onClose={() => tab.id && handleTabClose(tab.id)}
-                      />
-                    ))}
-                  </SortableContext>
-                </SortableGroupSection>
+                <Fragment key={`group-${group.id}`}>
+                  <DropGap id={`gap-${npIndex}`} isActive={isDraggingTab} />
+                  <SortableGroupSection
+                    groupId={group.id}
+                    title={group.title || '그룹'}
+                    color={(group.color as ChromeTabGroupColor) ?? 'grey'}
+                    tabCount={groupTabs.length}
+                    collapsed={group.collapsed}
+                    isDropTarget={dropIntoGroupId === group.id}
+                    onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
+                  >
+                    <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
+                      {groupTabs.map((tab) => (
+                        <SortableTabItem
+                          key={tab.id}
+                          tab={tab}
+                          profileTitleMap={profileTitleMap}
+                          onClick={() => tab.id && handleTabClick(tab.id)}
+                          onClose={() => tab.id && handleTabClose(tab.id)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </SortableGroupSection>
+                </Fragment>
               );
             }
 
@@ -326,15 +389,19 @@ export default function CurrentTabsView() {
             const chromeTab = tabs.find((t) => t.id === segment.tab.id);
             if (!chromeTab) return null;
             return (
-              <SortableStandaloneTab
-                key={`standalone-${chromeTab.id}`}
-                tab={chromeTab}
-                profileTitleMap={profileTitleMap}
-                onClick={() => chromeTab.id && handleTabClick(chromeTab.id)}
-                onClose={() => chromeTab.id && handleTabClose(chromeTab.id)}
-              />
+              <Fragment key={`standalone-${chromeTab.id}`}>
+                <DropGap id={`gap-${npIndex}`} isActive={isDraggingTab} />
+                <SortableStandaloneTab
+                  tab={chromeTab}
+                  profileTitleMap={profileTitleMap}
+                  onClick={() => chromeTab.id && handleTabClick(chromeTab.id)}
+                  onClose={() => chromeTab.id && handleTabClose(chromeTab.id)}
+                />
+              </Fragment>
             );
           })}
+          {/* 마지막 갭 */}
+          <DropGap id={`gap-${nonPinnedSegments.length}`} isActive={isDraggingTab} />
         </SortableContext>
 
         <DragOverlay>

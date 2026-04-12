@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, Fragment } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -7,6 +7,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -21,6 +22,23 @@ import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
 import DraggableStandaloneTab from './DraggableStandaloneTab';
 
+// ── 그룹 사이 드롭 갭 (높이 고정, 색상만 변경) ──
+
+function DropGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraggingTab });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`h-3 rounded transition-colors ${
+        isDraggingTab && isOver
+          ? 'bg-blue-200 dark:bg-blue-800/50 border border-dashed border-blue-400'
+          : ''
+      }`}
+    />
+  );
+}
+
 export default function EditorArea() {
   const currentProfile = useTabStore((s) => s.currentProfile);
   const addGroup = useTabStore((s) => s.addGroup);
@@ -29,6 +47,7 @@ export default function EditorArea() {
   const reorderItems = useTabStore((s) => s.reorderItems);
   const moveTab = useTabStore((s) => s.moveTab);
   const moveTabToGroup = useTabStore((s) => s.moveTabToGroup);
+  const moveTabToStandalone = useTabStore((s) => s.moveTabToStandalone);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'group' | 'tab' | 'standalone-tab' | null>(null);
@@ -70,6 +89,9 @@ export default function EditorArea() {
     item.kind === 'group' ? `g-${item.group.id}` : `st-${item.tab.id}`,
   );
 
+  // 탭 드래그 중인지 여부 (그룹이 아닌 탭을 드래그할 때만 갭 표시)
+  const isDraggingTab = activeType === 'tab' || activeType === 'standalone-tab';
+
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
     setActiveId(id);
@@ -84,17 +106,21 @@ export default function EditorArea() {
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const activeIdStr = event.active.id as string;
-    // 탭이 그룹 헤더 위에 있으면 drop-into
+    // 그룹 드래그 중이면 drop-into 무시
     if (activeIdStr.startsWith('g-')) {
       setDropIntoGroupId(null);
       return;
     }
     const overId = event.over?.id as string | undefined;
+    // 갭 위에 있으면 drop-into 해제
+    if (overId?.startsWith('gap-')) {
+      setDropIntoGroupId(null);
+      return;
+    }
     if (overId?.startsWith('g-')) {
       const groupId = overId.slice(2);
       // 그룹 내 탭이 자기 그룹 위에 있으면 무시
       if (!activeIdStr.startsWith('st-')) {
-        // 일반 탭 (그룹 내부) — 소속 그룹과 같으면 무시
         for (const item of allItems) {
           if (item.kind === 'group' && item.group.id === groupId) {
             if (item.group.tabs.some((t) => t.id === activeIdStr)) {
@@ -124,6 +150,40 @@ export default function EditorArea() {
     const overIdStr = over.id as string;
 
     if (activeIdStr === overIdStr) return;
+
+    // ── Gap drop: 탭을 그룹 사이 갭에 드롭 → 독립 탭으로 삽입 ──
+    if (overIdStr.startsWith('gap-')) {
+      const gapIndex = parseInt(overIdStr.slice(4));
+      // gapIndex는 items 배열에서의 삽입 위치
+      const realInsertIndex = gapIndex < items.length
+        ? allItems.indexOf(items[gapIndex])
+        : allItems.length;
+      if (realInsertIndex < 0) return;
+
+      if (activeIdStr.startsWith('st-')) {
+        // 독립 탭 → 갭 위치로 이동 (reorder)
+        const tabId = activeIdStr.slice(3);
+        const fromItem = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
+        if (fromItem) {
+          const realFrom = allItems.indexOf(fromItem);
+          if (realFrom >= 0) reorderItems(realFrom, realInsertIndex > realFrom ? realInsertIndex - 1 : realInsertIndex);
+        }
+      } else if (!activeIdStr.startsWith('g-')) {
+        // 그룹 내 탭 → 독립 탭으로 추출
+        const tabId = activeIdStr;
+        let fromGroupId = '';
+        for (const item of allItems) {
+          if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+            fromGroupId = item.group.id;
+            break;
+          }
+        }
+        if (fromGroupId) {
+          moveTabToStandalone(fromGroupId, tabId, realInsertIndex);
+        }
+      }
+      return;
+    }
 
     // Case 1: Drop into group (tab or standalone-tab → group header)
     if (currentDropIntoGroupId || overIdStr.startsWith('g-')) {
@@ -168,7 +228,6 @@ export default function EditorArea() {
       const fromIndex = topLevelIds.indexOf(activeIdStr);
       const toIndex = topLevelIds.indexOf(overIdStr);
       if (fromIndex >= 0 && toIndex >= 0) {
-        // Map to allItems indices (in case of filtering)
         const activeItem = items[fromIndex];
         const overItem = items[toIndex];
         const realFrom = allItems.indexOf(activeItem);
@@ -180,7 +239,51 @@ export default function EditorArea() {
       return;
     }
 
-    // Case 3: Tab reorder within/between groups
+    // Case 3: Group-internal tab → standalone tab 위치로 이동
+    if (
+      !activeIdStr.startsWith('g-') && !activeIdStr.startsWith('st-') &&
+      overIdStr.startsWith('st-')
+    ) {
+      const tabId = activeIdStr;
+      let fromGroupId = '';
+      for (const item of allItems) {
+        if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+          fromGroupId = item.group.id;
+          break;
+        }
+      }
+      if (!fromGroupId) return;
+
+      const overTopIdx = topLevelIds.indexOf(overIdStr);
+      if (overTopIdx >= 0) {
+        const overItem = items[overTopIdx];
+        const realTo = allItems.indexOf(overItem);
+        if (realTo >= 0) {
+          moveTabToStandalone(fromGroupId, tabId, realTo);
+        }
+      }
+      return;
+    }
+
+    // Case 4: Standalone tab → group-internal tab (joins that group)
+    if (
+      activeIdStr.startsWith('st-') &&
+      !overIdStr.startsWith('g-') && !overIdStr.startsWith('st-')
+    ) {
+      const tabId = activeIdStr.slice(3);
+      for (const item of allItems) {
+        if (item.kind === 'group') {
+          const overTabIdx = item.group.tabs.findIndex((t) => t.id === overIdStr);
+          if (overTabIdx >= 0) {
+            moveTabToGroup(tabId, item.group.id, overTabIdx);
+            return;
+          }
+        }
+      }
+      return;
+    }
+
+    // Case 5: Tab reorder within/between groups
     if (!activeIdStr.startsWith('g-') && !activeIdStr.startsWith('st-')) {
       const tabId = activeIdStr;
       let fromGroupId = '';
@@ -193,10 +296,8 @@ export default function EditorArea() {
 
       if (!fromGroupId) return;
 
-      // Find target
       let toGroupId = '';
       if (!overIdStr.startsWith('g-') && !overIdStr.startsWith('st-')) {
-        // Over another tab — find its group
         for (const item of allItems) {
           if (item.kind === 'group' && item.group.tabs.some((t) => t.id === overIdStr)) {
             toGroupId = item.group.id;
@@ -278,24 +379,21 @@ export default function EditorArea() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-3">
-            {items.map((item) => {
-              if (item.kind === 'group') {
-                return (
+          <div>
+            {items.map((item, index) => (
+              <Fragment key={item.kind === 'group' ? item.group.id : item.tab.id}>
+                <DropGap id={`gap-${index}`} isDraggingTab={isDraggingTab} />
+                {item.kind === 'group' ? (
                   <DraggableGroup
-                    key={item.group.id}
                     group={item.group}
                     isDropTarget={dropIntoGroupId === item.group.id}
                   />
-                );
-              }
-              return (
-                <DraggableStandaloneTab
-                  key={item.tab.id}
-                  tab={item.tab}
-                />
-              );
-            })}
+                ) : (
+                  <DraggableStandaloneTab tab={item.tab} />
+                )}
+              </Fragment>
+            ))}
+            <DropGap id={`gap-${items.length}`} isDraggingTab={isDraggingTab} />
           </div>
         </SortableContext>
 
@@ -311,10 +409,8 @@ export default function EditorArea() {
             <div className="opacity-80 bg-white dark:bg-gray-800 rounded shadow border px-3 py-1.5 text-xs">
               {(() => {
                 const tabId = activeType === 'standalone-tab' ? activeId.slice(3) : activeId;
-                // 독립 탭에서 찾기
                 const standalone = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
                 if (standalone?.kind === 'tab') return standalone.tab.title;
-                // 그룹 내 탭에서 찾기
                 for (const item of allItems) {
                   if (item.kind === 'group') {
                     const t = item.group.tabs.find((t) => t.id === tabId);
