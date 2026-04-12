@@ -1,4 +1,4 @@
-# Tab Manager Pro
+# Gara — Tab Manager
 
 Chrome Extension (Manifest V3) — 탭을 모으고, 도메인별로 그룹화하고, 프로필로 저장/복원하는 확장 프로그램.
 
