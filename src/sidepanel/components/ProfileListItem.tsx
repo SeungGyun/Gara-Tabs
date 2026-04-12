@@ -5,6 +5,7 @@ import { useProfileStore } from '../../shared/store/profileStore';
 import { COLOR_MAP } from '../../shared/utils/colors';
 import InlineEditText from '../../shared/components/InlineEditText';
 import { generateId } from '../../shared/utils/uuid';
+import { t, getDateLocale } from '../../shared/i18n';
 
 interface Props {
   profile: Profile;
@@ -41,12 +42,12 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
         option,
       });
       if (result.success) {
-        onShowToast(`"${profile.name}" 프로필을 불러왔습니다.`);
+        onShowToast(t('profileLoaded', profile.name));
       } else {
-        onShowToast('프로필 열기에 실패했습니다.', 'error');
+        onShowToast(t('profileLoadFailed'), 'error');
       }
     } catch {
-      onShowToast('프로필 열기 중 오류가 발생했습니다.', 'error');
+      onShowToast(t('profileLoadError'), 'error');
     } finally {
       setIsLoading(false);
       setShowLoadDialog(false);
@@ -59,35 +60,35 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
 
   const handleRename = async (newName: string) => {
     await updateProfile(profile.id, { name: newName });
-    onShowToast(`프로필 이름이 "${newName}"으로 변경되었습니다.`);
+    onShowToast(t('profileRenamed', newName));
   };
 
   const handleDuplicate = async () => {
     const clone = structuredClone(profile);
     clone.id = generateId();
-    clone.name = profile.name + ' (복사)';
+    clone.name = profile.name + t('copyLabel');
     clone.createdAt = Date.now();
     clone.updatedAt = Date.now();
     for (const item of clone.items) {
       if (item.kind === 'group') {
         item.group.id = generateId();
-        for (const t of item.group.tabs) t.id = generateId();
+        for (const tab of item.group.tabs) tab.id = generateId();
       } else {
         item.tab.id = generateId();
       }
     }
     await saveProfile(clone);
-    onShowToast(`"${clone.name}" 프로필이 복제되었습니다.`);
+    onShowToast(t('profileDuplicated', clone.name));
   };
 
   const handleRefreshFromTabs = async () => {
-    if (!window.confirm('현재 브라우저 탭으로 프로필을 덮어쓰시겠습니까?\n(이전 버전은 히스토리에 보관됩니다)')) return;
+    if (!window.confirm(t('refreshConfirm'))) return;
     setIsRefreshing(true);
     try {
       await refreshFromTabs(profile.id);
-      onShowToast(`"${profile.name}" 프로필이 현재 탭으로 갱신되었습니다.`);
+      onShowToast(t('profileRefreshed', profile.name));
     } catch {
-      onShowToast('갱신에 실패했습니다.', 'error');
+      onShowToast(t('refreshFailed'), 'error');
     } finally {
       setIsRefreshing(false);
     }
@@ -104,15 +105,17 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
   };
 
   const handleRestore = async (timestamp: number) => {
-    if (!window.confirm('이 버전으로 복원하시겠습니까?\n(현재 버전은 히스토리에 보관됩니다)')) return;
+    if (!window.confirm(t('restoreConfirm'))) return;
     await restoreFromHistory(profile.id, timestamp);
-    onShowToast('이전 버전으로 복원되었습니다.');
+    onShowToast(t('restored'));
     setShowHistory(false);
   };
 
   const handleTabClick = (url: string, groupName?: string) => {
     if (url) chrome.runtime.sendMessage({ type: 'FOCUS_OR_OPEN_TAB', url, groupName });
   };
+
+  const dateLocale = getDateLocale();
 
   return (
     <div className="card overflow-hidden">
@@ -130,11 +133,11 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             inputClassName="text-sm font-medium w-full"
           />
           <div className="text-xs text-gray-500">
-            {groupCount}개 그룹 · {totalTabs}개 탭
+            {t('groupsAndTabs', groupCount, totalTabs)}
           </div>
         </div>
         <div className="text-xs text-gray-400">
-          {new Date(profile.createdAt).toLocaleDateString('ko-KR')}
+          {new Date(profile.createdAt).toLocaleDateString(dateLocale)}
         </div>
       </div>
 
@@ -148,59 +151,59 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
               disabled={isLoading}
               className="btn-primary flex-1 text-xs py-2 disabled:opacity-50"
             >
-              {isLoading ? '여는 중...' : '열기'}
+              {isLoading ? t('opening') : t('open')}
             </button>
             <button
               onClick={handleRefreshFromTabs}
               disabled={isRefreshing}
               className="btn-secondary flex-1 text-xs py-2 disabled:opacity-50"
-              title="현재 브라우저 탭으로 프로필 덮어쓰기"
+              title={t('overwriteFromTabs')}
             >
-              {isRefreshing ? '갱신 중...' : '↻ 덮어쓰기'}
+              {isRefreshing ? t('refreshing') : t('overwrite')}
             </button>
           </div>
           {/* 보조 도구 */}
           <div className="flex gap-1 px-2 pb-2 pt-1 border-b">
-            <button onClick={handleOpenEditor} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title="에디터에서 편집">
-              ✏ 편집
+            <button onClick={handleOpenEditor} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title={t('editInEditor')}>
+              {t('editLabel')}
             </button>
-            <button onClick={handleDuplicate} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title="프로필 복제">
-              ⧉ 복제
+            <button onClick={handleDuplicate} className="btn-icon text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 flex-1" title={t('duplicateProfile')}>
+              {t('duplicateLabel')}
             </button>
             <button
               onClick={handleShowHistory}
               className={`btn-icon text-[11px] flex-1 ${showHistory ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-              title="변경 히스토리"
+              title={t('changeHistory')}
             >
-              ↺ 히스토리
+              {t('historyLabel')}
             </button>
-            <button onClick={onDelete} className="btn-icon text-[11px] text-gray-400 hover:text-red-600 flex-1" title="프로필 삭제">
-              ✕ 삭제
+            <button onClick={onDelete} className="btn-icon text-[11px] text-gray-400 hover:text-red-600 flex-1" title={t('deleteProfile')}>
+              {t('deleteLabel')}
             </button>
           </div>
 
           {/* 불러오기 다이얼로그 */}
           {showLoadDialog && (
             <div className="p-3 border-b bg-blue-50 dark:bg-blue-900/20 space-y-2">
-              <p className="text-xs font-medium">기존 탭 처리 방법:</p>
+              <p className="text-xs font-medium">{t('existingTabsOption')}</p>
               <div className="space-y-1">
                 <button
                   onClick={() => handleLoad('close_existing')}
                   className="w-full text-left text-xs p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-800/30"
                 >
-                  기존 탭 모두 닫기
+                  {t('closeExistingTabs')}
                 </button>
                 <button
                   onClick={() => handleLoad('keep_as_group')}
                   className="w-full text-left text-xs p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-800/30"
                 >
-                  기존 탭 유지 (그룹으로 묶기)
+                  {t('keepAsGroup')}
                 </button>
                 <button
                   onClick={() => handleLoad('cancel')}
                   className="w-full text-left text-xs p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
                 >
-                  취소
+                  {t('cancel')}
                 </button>
               </div>
             </div>
@@ -209,9 +212,9 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
           {/* 히스토리 */}
           {showHistory && (
             <div className="p-2 border-b bg-gray-50 dark:bg-gray-800/50 space-y-1">
-              <p className="text-xs font-medium px-1">변경 히스토리 (최근 2일)</p>
+              <p className="text-xs font-medium px-1">{t('historyTitle')}</p>
               {historyList.length === 0 ? (
-                <p className="text-xs text-gray-400 px-1 py-2">히스토리가 없습니다.</p>
+                <p className="text-xs text-gray-400 px-1 py-2">{t('noHistory')}</p>
               ) : (
                 historyList.map((snap) => {
                   const tabCount = profileTabCount(snap.profile);
@@ -223,20 +226,20 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                     >
                       <div>
                         <span className="text-gray-600 dark:text-gray-300">
-                          {new Date(snap.timestamp).toLocaleString('ko-KR', {
+                          {new Date(snap.timestamp).toLocaleString(dateLocale, {
                             month: 'short', day: 'numeric',
                             hour: '2-digit', minute: '2-digit',
                           })}
                         </span>
                         <span className="text-gray-400 ml-1.5">
-                          {gCount}그룹 · {tabCount}탭
+                          {t('groupsAndTabsShort', gCount, tabCount)}
                         </span>
                       </div>
                       <button
                         onClick={() => handleRestore(snap.timestamp)}
                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-medium"
                       >
-                        복원
+                        {t('restore')}
                       </button>
                     </div>
                   );
@@ -245,7 +248,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             </div>
           )}
 
-          {/* 아이템 트리 (그룹 + 독립 탭) */}
+          {/* 아이템 트리 */}
           <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
             {profile.items.map((item) => {
               if (item.kind === 'group') {
@@ -264,7 +267,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                       <div
                         key={tab.id}
                         className="flex items-center gap-1.5 pl-6 pr-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
-                        title={`${tab.url}\n클릭하여 새 탭에서 열기`}
+                        title={`${tab.url}\n${t('clickToOpen')}`}
                         onClick={() => handleTabClick(tab.url, group.name)}
                       >
                         {tab.favIconUrl ? (
@@ -280,13 +283,12 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                   </div>
                 );
               }
-              // 독립 탭
               const tab = item.tab;
               return (
                 <div
                   key={tab.id}
                   className="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
-                  title={`${tab.url}\n클릭하여 새 탭에서 열기`}
+                  title={`${tab.url}\n${t('clickToOpen')}`}
                   onClick={() => handleTabClick(tab.url)}
                 >
                   {tab.pinned && <span className="text-[10px]">📌</span>}

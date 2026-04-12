@@ -1,6 +1,7 @@
 import { useTabStore } from '../../shared/store/tabStore';
 import { TAB_GROUP_COLORS, type Tab } from '../../shared/types';
 import { COLOR_MAP } from '../../shared/utils/colors';
+import { t } from '../../shared/i18n';
 
 export default function PropertyPanel() {
   const currentProfile = useTabStore((s) => s.currentProfile);
@@ -13,15 +14,14 @@ export default function PropertyPanel() {
   if (!currentProfile || !selectedItemId || !selectedItemType) {
     return (
       <div className="w-property border-l bg-white dark:bg-gray-800 flex items-center justify-center">
-        <p className="text-xs text-gray-400 text-center px-4">
-          그룹 또는 탭을 선택하면<br />여기에서 편집할 수 있습니다.
+        <p className="text-xs text-gray-400 text-center px-4 whitespace-pre-line">
+          {t('selectToEdit')}
         </p>
       </div>
     );
   }
 
   if (selectedItemType === 'group') {
-    // items에서 그룹 찾기
     const groupItem = currentProfile.items.find(
       (i) => i.kind === 'group' && i.group.id === selectedItemId,
     );
@@ -32,12 +32,12 @@ export default function PropertyPanel() {
       <div className="w-property border-l bg-white dark:bg-gray-800 overflow-y-auto">
         <div className="p-4 border-b">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            그룹 속성
+            {t('groupProperties')}
           </h3>
         </div>
         <div className="p-4 space-y-4">
           <div>
-            <label className="text-xs font-medium block mb-1">이름</label>
+            <label className="text-xs font-medium block mb-1">{t('name')}</label>
             <input
               type="text"
               value={group.name}
@@ -46,7 +46,7 @@ export default function PropertyPanel() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium block mb-1">색상</label>
+            <label className="text-xs font-medium block mb-1">{t('color')}</label>
             <div className="flex gap-1 flex-wrap">
               {TAB_GROUP_COLORS.map((c) => (
                 <button
@@ -68,30 +68,29 @@ export default function PropertyPanel() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium block mb-1">도메인</label>
+            <label className="text-xs font-medium block mb-1">{t('domain')}</label>
             <input
               type="text"
               value={group.domain ?? ''}
               onChange={(e) =>
                 updateGroup(group.id, { domain: e.target.value || null })
               }
-              placeholder="자동 설정됨"
+              placeholder={t('autoDetected')}
               className="input"
             />
           </div>
           <div className="text-xs text-gray-500">
-            탭 {group.tabs.length}개
+            {t('tabCountLabel', group.tabs.length)}
           </div>
         </div>
       </div>
     );
   }
 
-  // 탭 선택 — 그룹 내 탭 또는 독립 탭
+  // 탭 선택
   let foundGroupId: string | null = null;
   let foundTab: Tab | undefined;
 
-  // 독립 탭에서 찾기
   const standaloneItem = currentProfile.items.find(
     (i) => i.kind === 'tab' && i.tab.id === selectedItemId,
   );
@@ -99,13 +98,12 @@ export default function PropertyPanel() {
     foundTab = standaloneItem.tab;
     foundGroupId = null;
   } else {
-    // 그룹 내 탭에서 찾기
     for (const item of currentProfile.items) {
       if (item.kind === 'group') {
-        const t = item.group.tabs.find((t) => t.id === selectedItemId);
-        if (t) {
+        const tab = item.group.tabs.find((tab) => tab.id === selectedItemId);
+        if (tab) {
           foundGroupId = item.group.id;
-          foundTab = t;
+          foundTab = tab;
           break;
         }
       }
@@ -126,12 +124,12 @@ export default function PropertyPanel() {
     <div className="w-property border-l bg-white dark:bg-gray-800 overflow-y-auto">
       <div className="p-4 border-b">
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-          탭 속성
+          {t('tabProperties')}
         </h3>
       </div>
       <div className="p-4 space-y-4">
         <div>
-          <label className="text-xs font-medium block mb-1">제목</label>
+          <label className="text-xs font-medium block mb-1">{t('title')}</label>
           <input
             type="text"
             value={foundTab.title}
@@ -140,7 +138,7 @@ export default function PropertyPanel() {
           />
         </div>
         <div>
-          <label className="text-xs font-medium block mb-1">URL</label>
+          <label className="text-xs font-medium block mb-1">{t('url')}</label>
           <input
             type="text"
             value={foundTab.url}
@@ -149,7 +147,7 @@ export default function PropertyPanel() {
           />
         </div>
         <div>
-          <label className="text-xs font-medium block mb-1">파비콘 URL</label>
+          <label className="text-xs font-medium block mb-1">{t('faviconUrl')}</label>
           <div className="flex items-center gap-2">
             {foundTab.favIconUrl && (
               <img
@@ -176,13 +174,13 @@ export default function PropertyPanel() {
               checked={foundTab.pinned}
               onChange={(e) => handleUpdate({ pinned: e.target.checked })}
             />
-            <span className="text-xs">고정 탭</span>
+            <span className="text-xs">{t('pinnedTab')}</span>
           </label>
         </div>
         <div className="text-xs text-gray-500">
           {foundGroupId
-            ? `소속 그룹: ${currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId)?.kind === 'group' ? (currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId) as { kind: 'group'; group: { name: string } }).group.name : ''}`
-            : '독립 탭'}
+            ? t('belongsToGroup', currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId)?.kind === 'group' ? (currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId) as { kind: 'group'; group: { name: string } }).group.name : '')
+            : t('standaloneTab')}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { STORAGE_KEYS, DEFAULT_SETTINGS, TAB_GROUP_COLORS, migrateProfile } from
 import { extractDomain, isExcludedUrl, domainToDisplayName } from '../shared/utils/domain';
 import { normalizeUrl } from '../shared/utils/dedup';
 import { EXISTING_TABS_GROUP_NAME } from '../shared/constants';
+import { t } from '../shared/i18n';
 
 // ===== Side Panel 열기 =====
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -226,7 +227,7 @@ async function loadProfile(
           createProperties: { windowId: currentWindow.id },
         });
         await chrome.tabGroups.update(gid, {
-          title: EXISTING_TABS_GROUP_NAME,
+          title: EXISTING_TABS_GROUP_NAME(),
           color: 'grey',
           collapsed: true,
         });
@@ -438,7 +439,7 @@ async function saveCurrentAsProfile(name: string) {
           kind: 'group',
           group: {
             id: crypto.randomUUID(),
-            name: chromeGroup?.title || '그룹',
+            name: chromeGroup?.title || t('group'),
             color: (chromeGroup?.color ?? TAB_GROUP_COLORS[colorIndex++]) as ChromeTabGroupColor,
             domain: null,
             tabs: currentGroupTabs,

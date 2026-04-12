@@ -115,6 +115,7 @@ export interface Settings {
   excludePatterns: string[];
   autoGroupEnabled: boolean;
   autoGroupRules: AutoGroupRule[];
+  language: string; // 'auto' | 'ko' | 'en' | 'ja' | 'zh-CN' | 'es' | 'fr' | 'de' | 'pt-BR'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   excludePatterns: ['chrome://', 'chrome-extension://', 'about:', 'edge://'],
   autoGroupEnabled: false,
   autoGroupRules: [],
+  language: 'auto',
 };
 
 // ============================================================

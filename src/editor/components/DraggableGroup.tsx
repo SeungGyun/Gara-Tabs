@@ -8,6 +8,7 @@ import { useTabStore } from '../../shared/store/tabStore';
 import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableTab from './DraggableTab';
 import type { DropIndicatorState } from './EditorArea';
+import { t } from '../../shared/i18n';
 
 interface Props {
   group: Group;
@@ -63,7 +64,7 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
     setShowAddTab(false);
   };
 
-  const tabIds = group.tabs.map((t) => t.id);
+  const tabIds = group.tabs.map((tab) => tab.id);
 
   return (
     <div ref={setNodeRef} style={style} className="relative">
@@ -86,12 +87,11 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
           className="flex items-center gap-2 px-3 py-2 bg-white/80 dark:bg-gray-800/80 cursor-pointer"
           onClick={() => selectItem(group.id, 'group')}
         >
-          {/* 드래그 핸들 */}
           <span
             {...attributes}
             {...listeners}
             className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-            title="드래그하여 순서 변경"
+            title={t('dragToReorder')}
           >
             ⠿
           </span>
@@ -116,17 +116,17 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
             className="text-sm font-medium flex-1 truncate"
             inputClassName="text-sm font-medium w-full"
           />
-          <span className="text-xs text-gray-500">{group.tabs.length}개</span>
+          <span className="text-xs text-gray-500">{t('countItems', group.tabs.length)}</span>
 
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm(`"${group.name}" 그룹을 삭제하시겠습니까?`)) {
+              if (window.confirm(t('deleteGroupConfirm', group.name))) {
                 deleteGroup(group.id);
               }
             }}
             className="text-gray-400 hover:text-red-500 text-sm px-1"
-            title="그룹 삭제"
+            title={t('deleteGroup')}
           >
             ×
           </button>
@@ -146,7 +146,6 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
               ))}
             </SortableContext>
 
-            {/* 탭 추가 */}
             {showAddTab ? (
               <div className="mt-1 p-2 bg-white dark:bg-gray-800 rounded space-y-1.5">
                 <input
@@ -159,7 +158,7 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
                 />
                 <input
                   type="text"
-                  placeholder="제목 (선택)"
+                  placeholder={t('titleOptional')}
                   value={newTabTitle}
                   onChange={(e) => setNewTabTitle(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddTab()}
@@ -170,14 +169,14 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
                     onClick={() => setShowAddTab(false)}
                     className="btn-secondary text-xs"
                   >
-                    취소
+                    {t('cancel')}
                   </button>
                   <button
                     onClick={handleAddTab}
                     disabled={!newTabUrl.trim()}
                     className="btn-primary text-xs disabled:opacity-50"
                   >
-                    추가
+                    {t('add')}
                   </button>
                 </div>
               </div>
@@ -186,7 +185,7 @@ export default function DraggableGroup({ group, dropIndicator }: Props) {
                 onClick={() => setShowAddTab(true)}
                 className="w-full mt-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 py-1 rounded hover:bg-white/50 dark:hover:bg-gray-700/50"
               >
-                + 탭 추가
+                {t('addTab')}
               </button>
             )}
           </div>

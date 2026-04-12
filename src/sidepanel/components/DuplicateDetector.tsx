@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useChromeTabs } from '../../shared/hooks/useChromeTabs';
 import { findDuplicates } from '../../shared/utils/dedup';
+import { t } from '../../shared/i18n';
 
 interface Props {
   onShowToast: (msg: string, type?: 'success' | 'error') => void;
@@ -13,7 +14,6 @@ export default function DuplicateDetector({ onShowToast }: Props) {
 
   const duplicates = findDuplicates(tabs);
 
-  // 각 그룹에서 남길 탭 선택 (기본값: 첫 번째 탭)
   const getKeepId = (key: string, dupTabs: chrome.tabs.Tab[]) => {
     return keepTabIds.get(key) ?? dupTabs[0].id!;
   };
@@ -29,7 +29,6 @@ export default function DuplicateDetector({ onShowToast }: Props) {
   const handleRemove = async () => {
     setIsRemoving(true);
     try {
-      // 남길 탭 ID 목록
       const keepIds: number[] = [];
       for (const [key, dupTabs] of duplicates) {
         keepIds.push(getKeepId(key, dupTabs));
@@ -41,13 +40,13 @@ export default function DuplicateDetector({ onShowToast }: Props) {
       });
 
       if (result.success) {
-        onShowToast(`${result.removed}개의 중복 탭을 닫았습니다.`);
+        onShowToast(t('duplicatesRemoved', result.removed));
         setKeepTabIds(new Map());
       } else {
-        onShowToast('중복 제거에 실패했습니다.', 'error');
+        onShowToast(t('removeDuplicatesFailed'), 'error');
       }
     } catch {
-      onShowToast('중복 제거 중 오류가 발생했습니다.', 'error');
+      onShowToast(t('removeDuplicatesError'), 'error');
     } finally {
       setIsRemoving(false);
     }
@@ -57,7 +56,7 @@ export default function DuplicateDetector({ onShowToast }: Props) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-gray-400 text-sm space-y-2">
         <span className="text-3xl">✓</span>
-        <span>중복 탭이 없습니다.</span>
+        <span>{t('noDuplicates')}</span>
       </div>
     );
   }
@@ -66,14 +65,14 @@ export default function DuplicateDetector({ onShowToast }: Props) {
     <div className="p-3 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">
-          {duplicates.size}개 URL에서 중복 발견
+          {t('duplicatesFound', duplicates.size)}
         </span>
         <button
           onClick={handleRemove}
           disabled={isRemoving}
           className="btn-danger text-xs disabled:opacity-50"
         >
-          {isRemoving ? '제거 중...' : '중복 제거'}
+          {isRemoving ? t('removing') : t('removeDuplicates')}
         </button>
       </div>
 
@@ -108,7 +107,7 @@ export default function DuplicateDetector({ onShowToast }: Props) {
                   )}
                   <span className="truncate">{tab.title || tab.url}</span>
                   {selectedId === tab.id && (
-                    <span className="text-blue-600 ml-auto flex-shrink-0">유지</span>
+                    <span className="text-blue-600 ml-auto flex-shrink-0">{t('keep')}</span>
                   )}
                 </label>
               ))}

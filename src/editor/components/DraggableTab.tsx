@@ -4,6 +4,7 @@ import type { Tab } from '../../shared/types';
 import { useTabStore } from '../../shared/store/tabStore';
 import InlineEditText from '../../shared/components/InlineEditText';
 import type { DropIndicatorState } from './EditorArea';
+import { t } from '../../shared/i18n';
 
 interface Props {
   tab: Tab;
@@ -50,17 +51,15 @@ export default function DraggableTab({ tab, groupId, dropIndicator }: Props) {
         }`}
         onClick={() => selectItem(tab.id, 'tab')}
       >
-        {/* 드래그 핸들 */}
         <span
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 text-xs"
-          title="드래그하여 이동"
+          title={t('dragToMove')}
         >
           ⠿
         </span>
 
-        {/* 파비콘 */}
         {tab.favIconUrl ? (
           <img
             src={tab.favIconUrl}
@@ -74,7 +73,6 @@ export default function DraggableTab({ tab, groupId, dropIndicator }: Props) {
           <span className="w-4 h-4 rounded bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
         )}
 
-        {/* 제목 (더블클릭으로 편집) */}
         <InlineEditText
           value={tab.title || tab.url}
           onCommit={(title) => updateTab(groupId, tab.id, { title })}
@@ -82,10 +80,8 @@ export default function DraggableTab({ tab, groupId, dropIndicator }: Props) {
           inputClassName="text-xs w-full"
         />
 
-        {/* 고정 표시 */}
         {tab.pinned && <span className="text-xs text-gray-400">📌</span>}
 
-        {/* 삭제 */}
         <button
           onClick={(e) => {
             e.stopPropagation();

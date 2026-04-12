@@ -5,6 +5,7 @@ import { useProfileStore } from '../../shared/store/profileStore';
 import { generateId } from '../../shared/utils/uuid';
 import ContextMenu, { type ContextMenuItem } from '../../shared/components/ContextMenu';
 import InlineEditText from '../../shared/components/InlineEditText';
+import { t } from '../../shared/i18n';
 
 interface Props {
   profiles: Profile[];
@@ -33,17 +34,17 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
 
     return [
       {
-        label: '복제',
+        label: t('duplicate'),
         onClick: async () => {
           const clone = structuredClone(profile);
           clone.id = generateId();
-          clone.name = profile.name + ' (복사)';
+          clone.name = profile.name + t('copyLabel');
           clone.createdAt = Date.now();
           clone.updatedAt = Date.now();
           for (const item of clone.items) {
             if (item.kind === 'group') {
               item.group.id = generateId();
-              for (const t of item.group.tabs) t.id = generateId();
+              for (const tab of item.group.tabs) tab.id = generateId();
             } else {
               item.tab.id = generateId();
             }
@@ -52,10 +53,10 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
         },
       },
       {
-        label: '삭제',
+        label: t('delete'),
         danger: true,
         onClick: async () => {
-          if (window.confirm(`"${profile.name}" 프로필을 삭제하시겠습니까?`)) {
+          if (window.confirm(t('profileDeleteConfirm', profile.name))) {
             await deleteProfile(profileId);
           }
         },
@@ -67,13 +68,13 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
     <div className="w-sidebar border-r bg-white dark:bg-gray-800 flex flex-col overflow-hidden">
       <div className="p-3 border-b">
         <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-          프로필 목록
+          {t('profileList')}
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto">
         {profiles.length === 0 ? (
           <div className="text-center text-xs text-gray-400 p-4">
-            저장된 프로필이 없습니다.
+            {t('noProfiles')}
           </div>
         ) : (
           profiles.map((profile) => {
@@ -97,7 +98,7 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
                   inputClassName="text-sm font-medium w-full"
                 />
                 <div className="text-xs text-gray-500 mt-0.5">
-                  {profileGroupCount(profile)}개 그룹 · {totalTabs}개 탭
+                  {t('groupsAndTabs', profileGroupCount(profile), totalTabs)}
                 </div>
               </div>
             );

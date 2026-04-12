@@ -28,6 +28,7 @@ import {
   type SimpleTab,
 } from '../../shared/utils/tabDragLogic';
 import type { ChromeTabGroupColor } from '../../shared/types';
+import { t } from '../../shared/i18n';
 
 // ── 드롭 인디케이터 타입 ──
 
@@ -359,13 +360,13 @@ export default function CurrentTabsView() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8 text-gray-400">로딩 중...</div>
+      <div className="flex items-center justify-center p-8 text-gray-400">{t('loading')}</div>
     );
   }
 
   return (
     <div className="p-2">
-      <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">{tabs.length}개 탭</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">{t('tabCount', tabs.length)}</div>
 
       <DndContext
         sensors={sensors}
@@ -418,7 +419,7 @@ export default function CurrentTabsView() {
                 <SortableGroupSection
                   key={sortableId}
                   groupId={group.id}
-                  title={group.title || '그룹'}
+                  title={group.title || t('group')}
                   color={(group.color as ChromeTabGroupColor) ?? 'grey'}
                   tabCount={groupTabs.length}
                   collapsed={group.collapsed}
@@ -466,7 +467,7 @@ export default function CurrentTabsView() {
                     COLOR_MAP[(activeDragData.group.color as ChromeTabGroupColor) ?? 'grey'],
                 }}
               />
-              {activeDragData.group.title || '그룹'}
+              {activeDragData.group.title || t('group')}
             </div>
           )}
           {activeDragData?.type === 'tab' && (
@@ -516,7 +517,7 @@ function PinnedSection({ children }: { children: React.ReactNode }) {
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: COLOR_MAP.grey }}
           />
-          <span className="truncate flex-1">📌 고정 탭</span>
+          <span className="truncate flex-1">{t('pinnedTabs')}</span>
         </button>
         {open && <div className="pb-1">{children}</div>}
       </div>
@@ -644,7 +645,7 @@ function SortableTabItem({
           className="text-xs truncate flex-1"
           title={
             profileMatch
-              ? `프로필 "${profileMatch.profileName}"의 커스텀 이름\n원본: ${tab.title}`
+              ? t('customNameTooltip', profileMatch.profileName, tab.title ?? '')
               : tab.title
           }
         >
@@ -653,7 +654,7 @@ function SortableTabItem({
         {profileMatch && profileMatch.title !== tab.title && (
           <span
             className="text-[10px] text-blue-500 flex-shrink-0"
-            title={`프로필: ${profileMatch.profileName}`}
+            title={t('profileBadgeTooltip', profileMatch.profileName)}
           >
             P
           </span>
@@ -722,7 +723,7 @@ function SortableStandaloneTab({
           className="text-sm truncate flex-1"
           title={
             profileMatch
-              ? `프로필 "${profileMatch.profileName}"의 커스텀 이름\n원본: ${tab.title}`
+              ? t('customNameTooltip', profileMatch.profileName, tab.title ?? '')
               : tab.title
           }
         >
@@ -731,7 +732,7 @@ function SortableStandaloneTab({
         {profileMatch && profileMatch.title !== tab.title && (
           <span
             className="text-[10px] text-blue-500 flex-shrink-0"
-            title={`프로필: ${profileMatch.profileName}`}
+            title={t('profileBadgeTooltip', profileMatch.profileName)}
           >
             P
           </span>

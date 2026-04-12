@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettingsStore } from '../../shared/store/settingsStore';
 import { TAB_GROUP_COLORS, type SubdomainMode, type ChromeTabGroupColor } from '../../shared/types';
 import { COLOR_MAP } from '../../shared/utils/colors';
+import { t, SUPPORTED_LANGUAGES } from '../../shared/i18n';
 
 export default function SettingsPanel() {
   const { settings, updateSettings, addCustomRule, removeCustomRule } =
@@ -9,7 +10,6 @@ export default function SettingsPanel() {
   const [newHostname, setNewHostname] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
 
-  // 자동 그룹화 규칙 추가 폼
   const [newRulePattern, setNewRulePattern] = useState('');
   const [newRuleName, setNewRuleName] = useState('');
   const [newRuleColor, setNewRuleColor] = useState<ChromeTabGroupColor>('blue');
@@ -58,21 +58,40 @@ export default function SettingsPanel() {
 
   return (
     <div className="p-3 space-y-4">
+      {/* 언어 설정 */}
+      <div>
+        <label className="text-sm font-medium block mb-2">{t('languageSetting')}</label>
+        <select
+          value={settings.language ?? 'auto'}
+          onChange={(e) => updateSettings({ language: e.target.value })}
+          className="input text-sm w-full"
+        >
+          {SUPPORTED_LANGUAGES.map(({ code, label }) => (
+            <option key={code} value={code}>
+              {code === 'auto' ? `${t('languageAuto')} — ${label}` : label}
+            </option>
+          ))}
+        </select>
+        {(settings.language ?? 'auto') === 'auto' && (
+          <p className="text-xs text-gray-400 mt-1">{t('languageAutoDesc')}</p>
+        )}
+      </div>
+
       {/* 서브도메인 모드 */}
       <div>
-        <label className="text-sm font-medium block mb-2">서브도메인 처리</label>
+        <label className="text-sm font-medium block mb-2">{t('subdomainHandling')}</label>
         <div className="space-y-1">
           {([
-            ['merge', '병합 (mail.google.com → google.com)'],
-            ['split', '분리 (각 서브도메인 별도 그룹)'],
-            ['custom', '커스텀 규칙 우선'],
+            ['merge', t('modeMerge')],
+            ['split', t('modeSplit')],
+            ['custom', t('modeCustom')],
           ] as const).map(([mode, desc]) => (
             <label key={mode} className="flex items-start gap-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <input
                 type="radio"
                 name="subdomainMode"
                 checked={settings.subdomainMode === mode}
-                onChange={() => handleModeChange(mode)}
+                onChange={() => handleModeChange(mode as SubdomainMode)}
                 className="mt-0.5"
               />
               <span className="text-xs">{desc}</span>
@@ -84,20 +103,19 @@ export default function SettingsPanel() {
       {/* 자동 그룹화 */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium">자동 그룹화</label>
+          <label className="text-sm font-medium">{t('autoGrouping')}</label>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
               checked={settings.autoGroupEnabled}
               onChange={(e) => updateSettings({ autoGroupEnabled: e.target.checked })}
             />
-            <span className="text-xs">{settings.autoGroupEnabled ? '켜짐' : '꺼짐'}</span>
+            <span className="text-xs">{settings.autoGroupEnabled ? t('on') : t('off')}</span>
           </label>
         </div>
 
         {settings.autoGroupEnabled && (
           <div className="space-y-2">
-            {/* 기존 규칙 목록 */}
             {settings.autoGroupRules.length > 0 && (
               <div className="space-y-1">
                 {settings.autoGroupRules.map((rule) => (
@@ -130,26 +148,25 @@ export default function SettingsPanel() {
               </div>
             )}
 
-            {/* 새 규칙 추가 폼 */}
             <div className="space-y-1.5 p-2 border rounded bg-white dark:bg-gray-800">
               <div className="flex gap-1">
                 <input
                   type="text"
-                  placeholder="URL 패턴 (예: github.com)"
+                  placeholder={t('urlPatternPlaceholder')}
                   value={newRulePattern}
                   onChange={(e) => setNewRulePattern(e.target.value)}
                   className="input flex-1 text-xs"
                 />
                 <input
                   type="text"
-                  placeholder="그룹명"
+                  placeholder={t('groupName')}
                   value={newRuleName}
                   onChange={(e) => setNewRuleName(e.target.value)}
                   className="input w-20 text-xs"
                 />
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500 mr-1">색상:</span>
+                <span className="text-xs text-gray-500 mr-1">{t('colorLabel')}</span>
                 {TAB_GROUP_COLORS.map((c) => (
                   <button
                     key={c}
@@ -165,7 +182,7 @@ export default function SettingsPanel() {
                   disabled={!newRulePattern.trim() || !newRuleName.trim()}
                   className="btn-primary text-xs ml-auto disabled:opacity-50"
                 >
-                  추가
+                  {t('add')}
                 </button>
               </div>
             </div>
@@ -175,7 +192,7 @@ export default function SettingsPanel() {
 
       {/* 커스텀 도메인 규칙 */}
       <div>
-        <label className="text-sm font-medium block mb-2">커스텀 도메인 규칙</label>
+        <label className="text-sm font-medium block mb-2">{t('customDomainRules')}</label>
         {Object.keys(settings.customDomainRules).length > 0 && (
           <div className="space-y-1 mb-2">
             {Object.entries(settings.customDomainRules).map(([host, group]) => (
@@ -199,27 +216,27 @@ export default function SettingsPanel() {
         <div className="flex gap-1">
           <input
             type="text"
-            placeholder="hostname"
+            placeholder={t('hostname')}
             value={newHostname}
             onChange={(e) => setNewHostname(e.target.value)}
             className="input flex-1 text-xs"
           />
           <input
             type="text"
-            placeholder="그룹명"
+            placeholder={t('groupName')}
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
             className="input w-20 text-xs"
           />
           <button onClick={handleAddRule} className="btn-secondary text-xs">
-            추가
+            {t('add')}
           </button>
         </div>
       </div>
 
       {/* 제외 패턴 */}
       <div>
-        <label className="text-sm font-medium block mb-2">제외 패턴</label>
+        <label className="text-sm font-medium block mb-2">{t('excludePatterns')}</label>
         <div className="space-y-1">
           {settings.excludePatterns.map((pattern, i) => (
             <div

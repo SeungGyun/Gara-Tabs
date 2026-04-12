@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Settings } from '../types';
 import { DEFAULT_SETTINGS, STORAGE_KEYS } from '../types';
+import { setUserLanguage } from '../i18n';
 
 interface SettingsState {
   settings: Settings;
@@ -21,6 +22,10 @@ async function writeSettings(settings: Settings): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: settings });
 }
 
+function syncLanguage(settings: Settings) {
+  setUserLanguage(settings.language ?? 'auto');
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   isLoading: false,
@@ -28,12 +33,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     set({ isLoading: true });
     const settings = await readSettings();
+    syncLanguage(settings);
     set({ settings, isLoading: false });
   },
 
   updateSettings: async (updates) => {
     const settings = { ...get().settings, ...updates };
     await writeSettings(settings);
+    syncLanguage(settings);
     set({ settings });
   },
 
@@ -58,6 +65,7 @@ if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[STORAGE_KEYS.SETTINGS]) {
       const newSettings = { ...DEFAULT_SETTINGS, ...changes[STORAGE_KEYS.SETTINGS].newValue };
+      syncLanguage(newSettings);
       useSettingsStore.setState({ settings: newSettings });
     }
   });

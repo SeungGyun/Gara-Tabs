@@ -1,5 +1,6 @@
 import { useTabStore } from '../../shared/store/tabStore';
 import { useProfileStore } from '../../shared/store/profileStore';
+import { t } from '../../shared/i18n';
 
 interface Props {
   onSave: () => void;
@@ -30,7 +31,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         }
       }
     } catch {
-      // 에러 무시
+      // ignore
     }
   };
 
@@ -68,7 +69,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         }
         await useProfileStore.getState().loadProfiles();
       } catch {
-        // 파싱 실패
+        // parse error
       }
     };
     input.click();
@@ -80,11 +81,11 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         Tab Manager Pro — Editor
       </h1>
 
-      <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary text-xs disabled:opacity-50" title="전체 프로필 내보내기">
-        내보내기
+      <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary text-xs disabled:opacity-50" title={t('exportAll')}>
+        {t('export')}
       </button>
-      <button onClick={handleImportFile} className="btn-secondary text-xs" title="JSON 파일 가져오기">
-        가져오기
+      <button onClick={handleImportFile} className="btn-secondary text-xs" title={t('importJson')}>
+        {t('import')}
       </button>
 
       <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
@@ -94,7 +95,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         disabled={!currentProfile}
         className="btn-secondary text-xs disabled:opacity-50"
       >
-        현재 탭 가져오기
+        {t('importCurrentTabs')}
       </button>
 
       <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
@@ -103,7 +104,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         onClick={undo}
         disabled={!canUndo}
         className="btn-icon disabled:opacity-30"
-        title="실행 취소 (Ctrl+Z)"
+        title={t('undoTooltip')}
       >
         ↩
       </button>
@@ -111,7 +112,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         onClick={redo}
         disabled={!canRedo}
         className="btn-icon disabled:opacity-30"
-        title="다시 실행 (Ctrl+Y)"
+        title={t('redoTooltip')}
       >
         ↪
       </button>
@@ -127,7 +128,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
             : 'bg-gray-200 text-gray-400 cursor-not-allowed'
         }`}
       >
-        저장
+        {t('save')}
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useProfileStore } from '../../shared/store/profileStore';
+import { t } from '../../shared/i18n';
 import ProfileListItem from './ProfileListItem';
 
 interface Props {
@@ -17,7 +18,6 @@ export default function ProfileSection({ onShowToast }: Props) {
   const [saveName, setSaveName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 검색 필터
   const filtered = profiles.filter((p) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -34,12 +34,9 @@ export default function ProfileSection({ onShowToast }: Props) {
     if (!saveName.trim()) return;
     setIsSaving(true);
     try {
-      // 동일 이름 존재 시 경고
       const existing = profiles.find((p) => p.name === saveName.trim());
       if (existing) {
-        const ok = window.confirm(
-          `"${saveName}" 프로필이 이미 존재합니다. 덮어쓰시겠습니까?`,
-        );
+        const ok = window.confirm(t('profileExistsConfirm', saveName));
         if (!ok) {
           setIsSaving(false);
           return;
@@ -47,17 +44,15 @@ export default function ProfileSection({ onShowToast }: Props) {
         await deleteProfile(existing.id);
       }
       await captureCurrentTabs(saveName.trim());
-      onShowToast(`"${saveName}" 프로필이 저장되었습니다.`);
+      onShowToast(t('profileSaved', saveName));
       setSaveName('');
       setShowSaveDialog(false);
     } catch {
-      onShowToast('프로필 저장에 실패했습니다.', 'error');
+      onShowToast(t('profileSaveFailed'), 'error');
     } finally {
       setIsSaving(false);
     }
   };
-
-  // ── JSON 내보내기/가져오기 ──
 
   const handleExportAll = () => {
     const json = JSON.stringify(profiles, null, 2);
@@ -68,7 +63,7 @@ export default function ProfileSection({ onShowToast }: Props) {
     a.download = `tab-manager-profiles-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    onShowToast(`${profiles.length}개 프로필을 내보냈습니다.`);
+    onShowToast(t('profilesExported', profiles.length));
   };
 
   const handleImport = () => {
@@ -94,53 +89,51 @@ export default function ProfileSection({ onShowToast }: Props) {
             count++;
           }
         }
-        onShowToast(`${count}개 프로필을 가져왔습니다.`);
+        onShowToast(t('profilesImported', count));
       } catch {
-        onShowToast('JSON 파일 형식이 올바르지 않습니다.', 'error');
+        onShowToast(t('invalidJsonFile'), 'error');
       }
     };
     input.click();
   };
 
   const handleDelete = async (id: string, name: string) => {
-    const ok = window.confirm(`"${name}" 프로필을 삭제하시겠습니까?`);
+    const ok = window.confirm(t('profileDeleteConfirm', name));
     if (!ok) return;
     await deleteProfile(id);
-    onShowToast(`"${name}" 프로필이 삭제되었습니다.`);
+    onShowToast(t('profileDeleted', name));
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8 text-gray-400">
-        로딩 중...
+        {t('loading')}
       </div>
     );
   }
 
   return (
     <div className="p-3 space-y-3">
-      {/* 새로 만들기 / 내보내기 / 가져오기 */}
       <div className="flex gap-1">
         <button
           onClick={() => setShowSaveDialog(true)}
           className="btn-primary flex-1 text-xs"
         >
-          + 새로 만들기
+          {t('createNew')}
         </button>
         <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary flex-1 text-xs disabled:opacity-50">
-          내보내기
+          {t('export')}
         </button>
         <button onClick={handleImport} className="btn-secondary flex-1 text-xs">
-          가져오기
+          {t('import')}
         </button>
       </div>
 
-      {/* 저장 다이얼로그 */}
       {showSaveDialog && (
         <div className="card p-3 space-y-2">
           <input
             type="text"
-            placeholder="프로필 이름 입력..."
+            placeholder={t('profileNamePlaceholder')}
             value={saveName}
             onChange={(e) => setSaveName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
@@ -152,36 +145,34 @@ export default function ProfileSection({ onShowToast }: Props) {
               onClick={() => { setShowSaveDialog(false); setSaveName(''); }}
               className="btn-secondary"
             >
-              취소
+              {t('cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={!saveName.trim() || isSaving}
               className="btn-primary disabled:opacity-50"
             >
-              {isSaving ? '저장 중...' : '저장'}
+              {isSaving ? t('saving') : t('save')}
             </button>
           </div>
         </div>
       )}
 
-      {/* 검색 */}
       {profiles.length > 0 && (
         <input
           type="text"
-          placeholder="프로필 검색..."
+          placeholder={t('searchProfiles')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="input"
         />
       )}
 
-      {/* 프로필 목록 */}
       {filtered.length === 0 ? (
         <div className="text-center text-sm text-gray-400 py-8">
           {profiles.length === 0
-            ? '저장된 프로필이 없습니다.'
-            : '검색 결과가 없습니다.'}
+            ? t('noProfiles')
+            : t('noSearchResults')}
         </div>
       ) : (
         <div className="space-y-1">

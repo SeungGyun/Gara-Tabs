@@ -21,6 +21,7 @@ import { profileTabCount, profileGroupCount, TAB_GROUP_COLORS, type ChromeTabGro
 import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
 import DraggableStandaloneTab from './DraggableStandaloneTab';
+import { t } from '../../shared/i18n';
 
 // ── 드롭 인디케이터 타입 ──
 
@@ -419,20 +420,20 @@ export default function EditorArea() {
               inputClassName="text-lg font-bold w-64"
             />
             <p className="text-xs text-gray-500">
-              {profileGroupCount(currentProfile)}개 그룹 · {profileTabCount(currentProfile)}개 탭
+              {t('groupsAndTabs', profileGroupCount(currentProfile), profileTabCount(currentProfile))}
             </p>
           </div>
         </div>
         <input
           type="text"
-          placeholder="그룹/탭 검색..."
+          placeholder={t('searchGroupsAndTabs')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="input text-sm"
         />
         {searchQuery && (
           <p className="text-xs text-gray-400">
-            {items.length}개 항목 일치
+            {t('matchingItems', items.length)}
           </p>
         )}
       </div>
@@ -502,7 +503,7 @@ export default function EditorArea() {
           <div className="card p-3 space-y-2">
             <input
               type="text"
-              placeholder="그룹 이름..."
+              placeholder={t('groupNamePlaceholder')}
               value={newGroupName}
               onChange={(e) => setNewGroupName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()}
@@ -531,14 +532,14 @@ export default function EditorArea() {
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowAddGroup(false)} className="btn-secondary text-xs">
-                취소
+                {t('cancel')}
               </button>
               <button
                 onClick={handleAddGroup}
                 disabled={!newGroupName.trim()}
                 className="btn-primary text-xs disabled:opacity-50"
               >
-                추가
+                {t('add')}
               </button>
             </div>
           </div>
@@ -554,7 +555,7 @@ export default function EditorArea() {
             />
             <input
               type="text"
-              placeholder="제목 (선택)"
+              placeholder={t('titleOptional')}
               value={newTabTitle}
               onChange={(e) => setNewTabTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddTab()}
@@ -562,14 +563,14 @@ export default function EditorArea() {
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowAddTab(false)} className="btn-secondary text-xs">
-                취소
+                {t('cancel')}
               </button>
               <button
                 onClick={handleAddTab}
                 disabled={!newTabUrl.trim()}
                 className="btn-primary text-xs disabled:opacity-50"
               >
-                추가
+                {t('add')}
               </button>
             </div>
           </div>
@@ -579,13 +580,13 @@ export default function EditorArea() {
               onClick={() => setShowAddGroup(true)}
               className="btn-secondary text-xs flex-1"
             >
-              + 그룹 추가
+              {t('addGroup')}
             </button>
             <button
               onClick={() => setShowAddTab(true)}
               className="btn-secondary text-xs flex-1"
             >
-              + 탭 추가
+              {t('addTab')}
             </button>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../../shared/i18n';
 
 interface Props {
   onShowToast: (msg: string, type?: 'success' | 'error') => void;
@@ -14,16 +15,16 @@ export default function ActionBar({ onShowToast }: Props) {
     try {
       const result = await chrome.runtime.sendMessage({ type: 'COLLECT_TABS' });
       if (result.success) {
-        let msg = `${result.moved}개 탭을 모았습니다.`;
+        let msg = t('collectSuccess', result.moved);
         if (result.incognito > 0) {
-          msg += ` (시크릿 ${result.incognito}개는 이동 불가)`;
+          msg += t('collectIncognito', result.incognito);
         }
         onShowToast(msg);
       } else {
-        onShowToast('탭 모으기에 실패했습니다.', 'error');
+        onShowToast(t('collectFailed'), 'error');
       }
     } catch {
-      onShowToast('탭 모으기 중 오류가 발생했습니다.', 'error');
+      onShowToast(t('collectError'), 'error');
     } finally {
       setIsCollecting(false);
     }
@@ -34,12 +35,12 @@ export default function ActionBar({ onShowToast }: Props) {
     try {
       const result = await chrome.runtime.sendMessage({ type: 'GROUP_BY_DOMAIN' });
       if (result.success) {
-        onShowToast(`${result.groupCount}개 도메인 그룹을 생성했습니다.`);
+        onShowToast(t('groupSuccess', result.groupCount));
       } else {
-        onShowToast('그룹화에 실패했습니다.', 'error');
+        onShowToast(t('groupFailed'), 'error');
       }
     } catch {
-      onShowToast('그룹화 중 오류가 발생했습니다.', 'error');
+      onShowToast(t('groupError'), 'error');
     } finally {
       setIsGrouping(false);
     }
@@ -51,15 +52,15 @@ export default function ActionBar({ onShowToast }: Props) {
       const result = await chrome.runtime.sendMessage({ type: 'CLOSE_COLLAPSED_GROUPS' });
       if (result.success) {
         if (result.closed === 0) {
-          onShowToast('접힌 그룹이 없습니다.');
+          onShowToast(t('noCollapsedGroups'));
         } else {
-          onShowToast(`${result.closed}개 그룹 (${result.tabsClosed}개 탭) 삭제됨`);
+          onShowToast(t('closedGroups', result.closed, result.tabsClosed));
         }
       } else {
-        onShowToast('비활성 그룹 삭제에 실패했습니다.', 'error');
+        onShowToast(t('closeGroupsFailed'), 'error');
       }
     } catch {
-      onShowToast('비활성 그룹 삭제 중 오류가 발생했습니다.', 'error');
+      onShowToast(t('closeGroupsError'), 'error');
     } finally {
       setIsClosing(false);
     }
@@ -72,21 +73,21 @@ export default function ActionBar({ onShowToast }: Props) {
         disabled={isCollecting}
         className="btn-primary flex-1 px-1 text-xs disabled:opacity-50"
       >
-        {isCollecting ? '모으는 중...' : '탭 모으기'}
+        {isCollecting ? t('collecting') : t('collectTabs')}
       </button>
       <button
         onClick={handleGroup}
         disabled={isGrouping}
         className="btn-primary flex-1 px-1 text-xs disabled:opacity-50"
       >
-        {isGrouping ? '그룹화 중...' : '도메인 그룹'}
+        {isGrouping ? t('grouping') : t('domainGroup')}
       </button>
       <button
         onClick={handleCloseCollapsed}
         disabled={isClosing}
         className="btn-danger flex-1 px-1 text-xs disabled:opacity-50"
       >
-        {isClosing ? '삭제 중...' : '비활성 삭제'}
+        {isClosing ? t('deleting') : t('closeInactive')}
       </button>
     </div>
   );

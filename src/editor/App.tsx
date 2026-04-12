@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useProfileStore } from '../shared/store/profileStore';
+import { useSettingsStore } from '../shared/store/settingsStore';
 import { useTabStore } from '../shared/store/tabStore';
+import { t } from '../shared/i18n';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import EditorArea from './components/EditorArea';
@@ -8,6 +10,9 @@ import PropertyPanel from './components/PropertyPanel';
 
 export default function App() {
   const loadProfiles = useProfileStore((s) => s.loadProfiles);
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+  // 언어 변경 시 전체 리렌더링 트리거 — 값 자체는 t()가 내부적으로 사용
+  useSettingsStore((s) => s.settings.language);
   const profiles = useProfileStore((s) => s.profiles);
   const saveProfile = useProfileStore((s) => s.saveProfile);
   const currentProfile = useTabStore((s) => s.currentProfile);
@@ -16,9 +21,9 @@ export default function App() {
 
   useEffect(() => {
     loadProfiles();
-  }, [loadProfiles]);
+    loadSettings();
+  }, [loadProfiles, loadSettings]);
 
-  // URL 파라미터에서 profileId 확인
   useEffect(() => {
     if (profiles.length === 0) return;
     const params = new URLSearchParams(window.location.search);
@@ -44,47 +49,40 @@ export default function App() {
     if (!currentProfile) return;
     try {
       await saveProfile(currentProfile);
-      showToast('프로필이 저장되었습니다.');
+      showToast(t('profileSavedMsg'));
     } catch {
-      showToast('저장에 실패했습니다.', 'error');
+      showToast(t('saveFailed'), 'error');
     }
   };
 
-  // 변경사항 감지: 초기 히스토리와 현재 상태 비교
   const hasChanges = useTabStore((s) => {
     if (!s.currentProfile || s.history.length === 0) return false;
     return JSON.stringify(s.currentProfile) !== JSON.stringify(s.history[0]);
   });
 
-  // 키보드 단축키
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
 
-      // Ctrl+S: 저장
       if (ctrl && e.key === 's') {
         e.preventDefault();
         if (hasChanges) handleSave();
         return;
       }
 
-      // Ctrl+Z: 실행 취소
       if (ctrl && !e.shiftKey && e.key === 'z') {
         e.preventDefault();
         useTabStore.getState().undo();
         return;
       }
 
-      // Ctrl+Shift+Z 또는 Ctrl+Y: 다시 실행
       if ((ctrl && e.shiftKey && e.key === 'z') || (ctrl && e.key === 'y')) {
         e.preventDefault();
         useTabStore.getState().redo();
         return;
       }
 
-      // Delete: 선택된 항목 삭제
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // 입력 필드에서는 무시
         if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
         const state = useTabStore.getState();
         if (!state.selectedItemId) return;
@@ -92,16 +90,14 @@ export default function App() {
         if (state.selectedItemType === 'group') {
           state.deleteGroup(state.selectedItemId);
         } else if (state.selectedItemType === 'tab') {
-          // 독립 탭인지 확인
           const isStandalone = state.currentProfile?.items.some(
             (i) => i.kind === 'tab' && i.tab.id === state.selectedItemId,
           );
           if (isStandalone) {
             state.deleteStandaloneTab(state.selectedItemId);
           } else {
-            // 그룹 내 탭 찾기
             for (const item of state.currentProfile?.items ?? []) {
-              if (item.kind === 'group' && item.group.tabs.some((t) => t.id === state.selectedItemId)) {
+              if (item.kind === 'group' && item.group.tabs.some((tab) => tab.id === state.selectedItemId)) {
                 state.deleteTab(item.group.id, state.selectedItemId);
                 break;
               }
@@ -111,7 +107,6 @@ export default function App() {
         return;
       }
 
-      // Escape: 선택 해제
       if (e.key === 'Escape') {
         useTabStore.getState().selectItem(null, null);
       }
@@ -121,7 +116,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [hasChanges, handleSave]);
 
-  // 미저장 변경 경고
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasChanges) {
@@ -132,7 +126,6 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasChanges]);
 
-  // 타이틀 업데이트
   useEffect(() => {
     const base = 'Tab Manager Pro — Editor';
     document.title = hasChanges ? `* ${base}` : base;
@@ -148,7 +141,7 @@ export default function App() {
           currentProfileId={currentProfile?.id ?? null}
           onSelect={(profile) => {
             if (hasChanges) {
-              if (!window.confirm('저장하지 않은 변경사항이 있습니다. 프로필을 전환하시겠습니까?')) return;
+              if (!window.confirm(t('unsavedChangesConfirm'))) return;
             }
             setCurrentProfile(profile);
           }}
@@ -159,7 +152,7 @@ export default function App() {
             <EditorArea />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-              좌측에서 프로필을 선택하세요.
+              {t('selectProfileHint')}
             </div>
           )}
         </div>

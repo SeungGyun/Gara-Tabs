@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useProfileStore } from '../shared/store/profileStore';
 import { useSettingsStore } from '../shared/store/settingsStore';
+import { t } from '../shared/i18n';
 import ActionBar from './components/ActionBar';
 import CurrentTabsView from './components/CurrentTabsView';
 import ProfileSection from './components/ProfileSection';
@@ -14,6 +15,8 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const loadProfiles = useProfileStore((s) => s.loadProfiles);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
+  // 언어 변경 시 전체 리렌더링 트리거 — 값 자체는 t()가 내부적으로 사용
+  useSettingsStore((s) => s.settings.language);
 
   useEffect(() => {
     loadProfiles();
@@ -38,14 +41,14 @@ export default function App() {
       {/* 뷰 탭 */}
       <div className="flex border-b text-sm">
         {([
-          ['tabs', '현재 탭'],
-          ['profiles', '프로필'],
-          ['duplicates', '중복'],
-          ['settings', '설정'],
+          ['tabs', t('currentTabs')],
+          ['profiles', t('profiles')],
+          ['duplicates', t('duplicates')],
+          ['settings', t('settings')],
         ] as const).map(([key, label]) => (
           <button
             key={key}
-            onClick={() => setActiveView(key)}
+            onClick={() => setActiveView(key as TabView)}
             className={`flex-1 py-2 text-center transition-colors ${
               activeView === key
                 ? 'text-blue-600 border-b-2 border-blue-600 font-medium'
