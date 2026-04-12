@@ -110,8 +110,8 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
     setShowHistory(false);
   };
 
-  const handleTabClick = (url: string) => {
-    if (url) chrome.tabs.create({ url, active: false });
+  const handleTabClick = (url: string, groupName?: string) => {
+    if (url) chrome.runtime.sendMessage({ type: 'FOCUS_OR_OPEN_TAB', url, groupName });
   };
 
   return (
@@ -265,7 +265,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                         key={tab.id}
                         className="flex items-center gap-1.5 pl-6 pr-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
                         title={`${tab.url}\n클릭하여 새 탭에서 열기`}
-                        onClick={() => handleTabClick(tab.url)}
+                        onClick={() => handleTabClick(tab.url, group.name)}
                       >
                         {tab.favIconUrl ? (
                           <img src={tab.favIconUrl} alt="" className="w-3 h-3 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />

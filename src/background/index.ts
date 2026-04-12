@@ -39,6 +39,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       saveCurrentAsProfile(message.name).then(sendResponse);
       return true;
 
+    case 'FOCUS_OR_OPEN_TAB':
+      focusOrOpenTab(message.url, message.groupName).then(sendResponse);
+      return true;
+
     case 'CLOSE_COLLAPSED_GROUPS':
       closeCollapsedGroups().then(sendResponse);
       return true;
@@ -562,10 +566,68 @@ async function toggleGroupCollapsed(groupId: number, collapsed: boolean): Promis
 }
 
 // ===== 에디터 열기 =====
-function openEditor(profileId?: string) {
-  const url = chrome.runtime.getURL('src/editor/index.html');
-  const fullUrl = profileId ? `${url}?profileId=${profileId}` : url;
-  chrome.tabs.create({ url: fullUrl });
+async function openEditor(profileId?: string) {
+  const editorBaseUrl = chrome.runtime.getURL('src/editor/index.html');
+  const fullUrl = profileId ? `${editorBaseUrl}?profileId=${profileId}` : editorBaseUrl;
+
+  // 이미 열린 에디터 탭 찾기
+  const allTabs = await chrome.tabs.query({});
+  const existingTab = allTabs.find((t) => t.url?.startsWith(editorBaseUrl));
+
+  if (existingTab?.id != null) {
+    // 기존 에디터 탭을 재사용: URL 업데이트 후 포커스
+    await chrome.tabs.update(existingTab.id, { url: fullUrl, active: true });
+    if (existingTab.windowId != null) {
+      await chrome.windows.update(existingTab.windowId, { focused: true });
+    }
+  } else {
+    chrome.tabs.create({ url: fullUrl });
+  }
+}
+
+// ===== 기존 탭 포커스 또는 새 탭 열기 =====
+async function focusOrOpenTab(url: string, groupName?: string): Promise<{ success: boolean }> {
+  try {
+    const allTabs = await chrome.tabs.query({});
+    const targetNorm = normalizeUrl(url);
+
+    // 같은 URL을 가진 탭 찾기
+    const matchingTabs = allTabs.filter(
+      (t) => t.url && t.id != null && normalizeUrl(t.url) === targetNorm,
+    );
+
+    if (matchingTabs.length > 0) {
+      // 그룹명이 지정된 경우: 같은 그룹에 속한 탭 우선
+      let bestMatch = matchingTabs[0];
+      if (groupName) {
+        for (const tab of matchingTabs) {
+          if (tab.groupId != null && tab.groupId !== -1) {
+            try {
+              const group = await chrome.tabGroups.get(tab.groupId);
+              if (group.title === groupName) {
+                bestMatch = tab;
+                break;
+              }
+            } catch {
+              // 그룹 조회 실패 시 무시
+            }
+          }
+        }
+      }
+
+      await chrome.tabs.update(bestMatch.id!, { active: true });
+      if (bestMatch.windowId != null) {
+        await chrome.windows.update(bestMatch.windowId, { focused: true });
+      }
+      return { success: true };
+    }
+
+    // 일치하는 탭이 없으면 새 탭 생성
+    await chrome.tabs.create({ url, active: true });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
 }
 
 // ===== 자동 그룹화: 탭 생성/업데이트 시 규칙 적용 =====
