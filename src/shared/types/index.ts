@@ -18,12 +18,69 @@ export interface Group {
   tabs: Tab[];
 }
 
+export type ProfileItem =
+  | { kind: 'group'; group: Group }
+  | { kind: 'tab'; tab: Tab };
+
 export interface Profile {
   id: string;
   name: string;
   createdAt: number;
   updatedAt: number;
-  groups: Group[];
+  items: ProfileItem[];
+}
+
+// ── 프로필 헬퍼 함수 ──
+
+export function profileAllTabs(profile: Profile): Tab[] {
+  return profile.items.flatMap((i) => (i.kind === 'group' ? i.group.tabs : [i.tab]));
+}
+
+export function profileGroups(profile: Profile): Group[] {
+  return profile.items
+    .filter((i): i is { kind: 'group'; group: Group } => i.kind === 'group')
+    .map((i) => i.group);
+}
+
+export function profileTabCount(profile: Profile): number {
+  return profile.items.reduce(
+    (sum, i) => sum + (i.kind === 'group' ? i.group.tabs.length : 1),
+    0,
+  );
+}
+
+export function profileGroupCount(profile: Profile): number {
+  return profile.items.filter((i) => i.kind === 'group').length;
+}
+
+// ── 저장 데이터 마이그레이션 ──
+
+const LEGACY_UNGROUPED = '미분류';
+const LEGACY_PINNED = '📌 고정 탭';
+
+/** 이전 형식(groups[]) → 새 형식(items[]) 자동 변환 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function migrateProfile(raw: any): Profile {
+  if (raw.items && Array.isArray(raw.items)) return raw as Profile;
+
+  // 이전 형식: groups[]
+  const items: ProfileItem[] = [];
+  for (const group of raw.groups ?? []) {
+    if (group.name === LEGACY_UNGROUPED || group.name === LEGACY_PINNED) {
+      for (const tab of group.tabs ?? []) {
+        items.push({ kind: 'tab', tab });
+      }
+    } else {
+      items.push({ kind: 'group', group });
+    }
+  }
+  return {
+    id: raw.id,
+    name: raw.name,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    items,
+  };
 }
 
 // ============================================================

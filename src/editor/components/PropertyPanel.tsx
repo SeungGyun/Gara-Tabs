@@ -1,5 +1,5 @@
 import { useTabStore } from '../../shared/store/tabStore';
-import { TAB_GROUP_COLORS } from '../../shared/types';
+import { TAB_GROUP_COLORS, type Tab } from '../../shared/types';
 import { COLOR_MAP } from '../../shared/utils/colors';
 
 export default function PropertyPanel() {
@@ -8,6 +8,7 @@ export default function PropertyPanel() {
   const selectedItemType = useTabStore((s) => s.selectedItemType);
   const updateGroup = useTabStore((s) => s.updateGroup);
   const updateTab = useTabStore((s) => s.updateTab);
+  const updateStandaloneTab = useTabStore((s) => s.updateStandaloneTab);
 
   if (!currentProfile || !selectedItemId || !selectedItemType) {
     return (
@@ -20,8 +21,12 @@ export default function PropertyPanel() {
   }
 
   if (selectedItemType === 'group') {
-    const group = currentProfile.groups.find((g) => g.id === selectedItemId);
-    if (!group) return null;
+    // items에서 그룹 찾기
+    const groupItem = currentProfile.items.find(
+      (i) => i.kind === 'group' && i.group.id === selectedItemId,
+    );
+    if (!groupItem || groupItem.kind !== 'group') return null;
+    const group = groupItem.group;
 
     return (
       <div className="w-property border-l bg-white dark:bg-gray-800 overflow-y-auto">
@@ -82,20 +87,40 @@ export default function PropertyPanel() {
     );
   }
 
-  // 탭 선택
-  let foundGroup: typeof currentProfile.groups[number] | undefined;
-  let foundTab: typeof currentProfile.groups[number]['tabs'][number] | undefined;
+  // 탭 선택 — 그룹 내 탭 또는 독립 탭
+  let foundGroupId: string | null = null;
+  let foundTab: Tab | undefined;
 
-  for (const g of currentProfile.groups) {
-    const t = g.tabs.find((t) => t.id === selectedItemId);
-    if (t) {
-      foundGroup = g;
-      foundTab = t;
-      break;
+  // 독립 탭에서 찾기
+  const standaloneItem = currentProfile.items.find(
+    (i) => i.kind === 'tab' && i.tab.id === selectedItemId,
+  );
+  if (standaloneItem && standaloneItem.kind === 'tab') {
+    foundTab = standaloneItem.tab;
+    foundGroupId = null;
+  } else {
+    // 그룹 내 탭에서 찾기
+    for (const item of currentProfile.items) {
+      if (item.kind === 'group') {
+        const t = item.group.tabs.find((t) => t.id === selectedItemId);
+        if (t) {
+          foundGroupId = item.group.id;
+          foundTab = t;
+          break;
+        }
+      }
     }
   }
 
-  if (!foundGroup || !foundTab) return null;
+  if (!foundTab) return null;
+
+  const handleUpdate = (updates: Record<string, unknown>) => {
+    if (foundGroupId) {
+      updateTab(foundGroupId, foundTab.id, updates);
+    } else {
+      updateStandaloneTab(foundTab.id, updates);
+    }
+  };
 
   return (
     <div className="w-property border-l bg-white dark:bg-gray-800 overflow-y-auto">
@@ -110,9 +135,7 @@ export default function PropertyPanel() {
           <input
             type="text"
             value={foundTab.title}
-            onChange={(e) =>
-              updateTab(foundGroup!.id, foundTab!.id, { title: e.target.value })
-            }
+            onChange={(e) => handleUpdate({ title: e.target.value })}
             className="input"
           />
         </div>
@@ -121,9 +144,7 @@ export default function PropertyPanel() {
           <input
             type="text"
             value={foundTab.url}
-            onChange={(e) =>
-              updateTab(foundGroup!.id, foundTab!.id, { url: e.target.value })
-            }
+            onChange={(e) => handleUpdate({ url: e.target.value })}
             className="input"
           />
         </div>
@@ -143,11 +164,7 @@ export default function PropertyPanel() {
             <input
               type="text"
               value={foundTab.favIconUrl ?? ''}
-              onChange={(e) =>
-                updateTab(foundGroup!.id, foundTab!.id, {
-                  favIconUrl: e.target.value || null,
-                })
-              }
+              onChange={(e) => handleUpdate({ favIconUrl: e.target.value || null })}
               className="input flex-1"
             />
           </div>
@@ -157,15 +174,15 @@ export default function PropertyPanel() {
             <input
               type="checkbox"
               checked={foundTab.pinned}
-              onChange={(e) =>
-                updateTab(foundGroup!.id, foundTab!.id, { pinned: e.target.checked })
-              }
+              onChange={(e) => handleUpdate({ pinned: e.target.checked })}
             />
             <span className="text-xs">고정 탭</span>
           </label>
         </div>
         <div className="text-xs text-gray-500">
-          소속 그룹: {foundGroup.name}
+          {foundGroupId
+            ? `소속 그룹: ${currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId)?.kind === 'group' ? (currentProfile.items.find((i) => i.kind === 'group' && i.group.id === foundGroupId) as { kind: 'group'; group: { name: string } }).group.name : ''}`
+            : '독립 탭'}
         </div>
       </div>
     </div>

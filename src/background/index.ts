@@ -1,5 +1,5 @@
-import type { Settings, Profile, LoadProfileOption, ChromeTabGroupColor } from '../shared/types';
-import { STORAGE_KEYS, DEFAULT_SETTINGS, TAB_GROUP_COLORS } from '../shared/types';
+import type { Settings, Profile, LoadProfileOption, ChromeTabGroupColor, ProfileItem } from '../shared/types';
+import { STORAGE_KEYS, DEFAULT_SETTINGS, TAB_GROUP_COLORS, migrateProfile } from '../shared/types';
 import { extractDomain, isExcludedUrl, domainToDisplayName } from '../shared/utils/domain';
 import { normalizeUrl } from '../shared/utils/dedup';
 import { EXISTING_TABS_GROUP_NAME } from '../shared/constants';
@@ -49,6 +49,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'MOVE_GROUP':
       moveGroup(message.groupId, message.targetIndex).then(sendResponse);
+      return true;
+
+    case 'TOGGLE_GROUP_COLLAPSED':
+      toggleGroupCollapsed(message.groupId, message.collapsed).then(sendResponse);
       return true;
   }
 });
@@ -226,39 +230,58 @@ async function createProfileTabs(
   windowId: number,
   skipUrls?: Set<string>,
 ) {
-  for (const group of profile.groups) {
-    const createdTabIds: number[] = [];
-
-    for (const tab of group.tabs) {
+  for (const item of profile.items) {
+    if (item.kind === 'tab') {
+      // 독립 탭 생성 (고정 탭 포함)
+      const tab = item.tab;
       if (!tab.url || tab.url === '') continue;
       if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
-
       try {
-        const newTab = await chrome.tabs.create({
+        await chrome.tabs.create({
           url: tab.url,
           windowId,
           active: false,
           pinned: tab.pinned,
         });
-        if (newTab.id) createdTabIds.push(newTab.id);
       } catch {
         // URL 열기 실패 시 스킵
       }
-    }
+    } else {
+      // 그룹 탭 생성
+      const group = item.group;
+      const createdTabIds: number[] = [];
 
-    // 그룹 묶기
-    if (createdTabIds.length > 0 && !group.tabs.every((t) => t.pinned)) {
-      try {
-        const gid = await chrome.tabs.group({
-          tabIds: createdTabIds,
-          createProperties: { windowId },
-        });
-        await chrome.tabGroups.update(gid, {
-          title: group.name,
-          color: group.color as chrome.tabGroups.ColorEnum,
-        });
-      } catch {
-        // 그룹화 실패 스킵
+      for (const tab of group.tabs) {
+        if (!tab.url || tab.url === '') continue;
+        if (skipUrls && skipUrls.has(normalizeUrl(tab.url))) continue;
+
+        try {
+          const newTab = await chrome.tabs.create({
+            url: tab.url,
+            windowId,
+            active: false,
+            pinned: tab.pinned,
+          });
+          if (newTab.id) createdTabIds.push(newTab.id);
+        } catch {
+          // URL 열기 실패 시 스킵
+        }
+      }
+
+      // 그룹 묶기
+      if (createdTabIds.length > 0) {
+        try {
+          const gid = await chrome.tabs.group({
+            tabIds: createdTabIds,
+            createProperties: { windowId },
+          });
+          await chrome.tabGroups.update(gid, {
+            title: group.name,
+            color: group.color as chrome.tabGroups.ColorEnum,
+          });
+        } catch {
+          // 그룹화 실패 스킵
+        }
       }
     }
   }
@@ -319,65 +342,64 @@ async function saveCurrentAsProfile(name: string) {
     const groupMap = new Map<number, chrome.tabGroups.TabGroup>();
     for (const g of groups) groupMap.set(g.id, g);
 
-    const grouped = new Map<number, chrome.tabs.Tab[]>();
-    const ungrouped: chrome.tabs.Tab[] = [];
-
-    for (const tab of tabs) {
-      if (tab.groupId && tab.groupId !== -1) {
-        const list = grouped.get(tab.groupId) ?? [];
-        list.push(tab);
-        grouped.set(tab.groupId, list);
-      } else {
-        ungrouped.push(tab);
-      }
-    }
-
-    const profileGroups = [];
+    const sorted = [...tabs].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    const items: ProfileItem[] = [];
+    let currentGroupId: number | null = null;
+    let currentGroupTabs: { id: string; url: string; title: string; favIconUrl: string | null; pinned: boolean }[] = [];
     let colorIndex = 0;
 
-    for (const [groupId, groupTabs] of grouped) {
-      const chromeGroup = groupMap.get(groupId);
-      profileGroups.push({
-        id: crypto.randomUUID(),
-        name: chromeGroup?.title || `그룹`,
-        color: (chromeGroup?.color ?? TAB_GROUP_COLORS[colorIndex++]) as ChromeTabGroupColor,
-        domain: null,
-        tabs: groupTabs.map((t) => ({
-          id: crypto.randomUUID(),
-          url: t.url ?? '',
-          title: t.title ?? '',
-          favIconUrl: t.favIconUrl ?? null,
-          pinned: t.pinned ?? false,
-        })),
-      });
-    }
+    const flushGroup = () => {
+      if (currentGroupId !== null && currentGroupTabs.length > 0) {
+        const chromeGroup = groupMap.get(currentGroupId);
+        items.push({
+          kind: 'group',
+          group: {
+            id: crypto.randomUUID(),
+            name: chromeGroup?.title || '그룹',
+            color: (chromeGroup?.color ?? TAB_GROUP_COLORS[colorIndex++]) as ChromeTabGroupColor,
+            domain: null,
+            tabs: currentGroupTabs,
+          },
+        });
+      }
+      currentGroupId = null;
+      currentGroupTabs = [];
+    };
 
-    if (ungrouped.length > 0) {
-      profileGroups.push({
+    for (const tab of sorted) {
+      const gid = tab.groupId ?? -1;
+      const profileTab = {
         id: crypto.randomUUID(),
-        name: '미분류',
-        color: 'grey' as ChromeTabGroupColor,
-        domain: null,
-        tabs: ungrouped.map((t) => ({
-          id: crypto.randomUUID(),
-          url: t.url ?? '',
-          title: t.title ?? '',
-          favIconUrl: t.favIconUrl ?? null,
-          pinned: t.pinned ?? false,
-        })),
-      });
+        url: tab.url ?? '',
+        title: tab.title ?? '',
+        favIconUrl: tab.favIconUrl ?? null,
+        pinned: tab.pinned ?? false,
+      };
+
+      if (gid !== -1 && groupMap.has(gid)) {
+        if (gid === currentGroupId) {
+          currentGroupTabs.push(profileTab);
+        } else {
+          flushGroup();
+          currentGroupId = gid;
+          currentGroupTabs = [profileTab];
+        }
+      } else {
+        flushGroup();
+        items.push({ kind: 'tab', tab: profileTab });
+      }
     }
+    flushGroup();
 
     const profile: Profile = {
       id: crypto.randomUUID(),
       name,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      groups: profileGroups,
+      items,
     };
 
     const existing = await getProfiles();
-    // 같은 이름이면 덮어쓰기
     const idx = existing.findIndex((p) => p.name === name);
     if (idx >= 0) {
       existing[idx] = profile;
@@ -451,6 +473,15 @@ async function moveGroup(groupId: number, targetIndex: number): Promise<{ succes
   }
 }
 
+async function toggleGroupCollapsed(groupId: number, collapsed: boolean): Promise<{ success: boolean }> {
+  try {
+    await chrome.tabGroups.update(groupId, { collapsed });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
 // ===== 에디터 열기 =====
 function openEditor(profileId?: string) {
   const url = chrome.runtime.getURL('src/editor/index.html');
@@ -506,5 +537,6 @@ async function getSettings(): Promise<Settings> {
 
 async function getProfiles(): Promise<Profile[]> {
   const data = await chrome.storage.local.get(STORAGE_KEYS.PROFILES);
-  return data[STORAGE_KEYS.PROFILES] ?? [];
+  const raw = data[STORAGE_KEYS.PROFILES] ?? [];
+  return raw.map(migrateProfile);
 }

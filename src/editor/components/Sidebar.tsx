@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Profile } from '../../shared/types';
+import { profileTabCount, profileGroupCount } from '../../shared/types';
 import { useProfileStore } from '../../shared/store/profileStore';
 import { generateId } from '../../shared/utils/uuid';
 import ContextMenu, { type ContextMenuItem } from '../../shared/components/ContextMenu';
@@ -39,9 +40,13 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
           clone.name = profile.name + ' (복사)';
           clone.createdAt = Date.now();
           clone.updatedAt = Date.now();
-          for (const g of clone.groups) {
-            g.id = generateId();
-            for (const t of g.tabs) t.id = generateId();
+          for (const item of clone.items) {
+            if (item.kind === 'group') {
+              item.group.id = generateId();
+              for (const t of item.group.tabs) t.id = generateId();
+            } else {
+              item.tab.id = generateId();
+            }
           }
           await saveProfile(clone);
         },
@@ -72,7 +77,7 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
           </div>
         ) : (
           profiles.map((profile) => {
-            const totalTabs = profile.groups.reduce((s, g) => s + g.tabs.length, 0);
+            const totalTabs = profileTabCount(profile);
             const isActive = profile.id === currentProfileId;
             return (
               <div
@@ -92,7 +97,7 @@ export default function Sidebar({ profiles, currentProfileId, onSelect }: Props)
                   inputClassName="text-sm font-medium w-full"
                 />
                 <div className="text-xs text-gray-500 mt-0.5">
-                  {profile.groups.length}개 그룹 · {totalTabs}개 탭
+                  {profileGroupCount(profile)}개 그룹 · {totalTabs}개 탭
                 </div>
               </div>
             );

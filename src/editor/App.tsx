@@ -92,11 +92,19 @@ export default function App() {
         if (state.selectedItemType === 'group') {
           state.deleteGroup(state.selectedItemId);
         } else if (state.selectedItemType === 'tab') {
-          // 탭이 속한 그룹 찾기
-          for (const g of state.currentProfile?.groups ?? []) {
-            if (g.tabs.some((t) => t.id === state.selectedItemId)) {
-              state.deleteTab(g.id, state.selectedItemId);
-              break;
+          // 독립 탭인지 확인
+          const isStandalone = state.currentProfile?.items.some(
+            (i) => i.kind === 'tab' && i.tab.id === state.selectedItemId,
+          );
+          if (isStandalone) {
+            state.deleteStandaloneTab(state.selectedItemId);
+          } else {
+            // 그룹 내 탭 찾기
+            for (const item of state.currentProfile?.items ?? []) {
+              if (item.kind === 'group' && item.group.tabs.some((t) => t.id === state.selectedItemId)) {
+                state.deleteTab(item.group.id, state.selectedItemId);
+                break;
+              }
             }
           }
         }

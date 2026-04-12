@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -16,22 +16,29 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { useTabStore } from '../../shared/store/tabStore';
-import { TAB_GROUP_COLORS, type ChromeTabGroupColor } from '../../shared/types';
+import { profileTabCount, profileGroupCount, TAB_GROUP_COLORS, type ChromeTabGroupColor } from '../../shared/types';
 import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
+import DraggableStandaloneTab from './DraggableStandaloneTab';
 
 export default function EditorArea() {
   const currentProfile = useTabStore((s) => s.currentProfile);
   const addGroup = useTabStore((s) => s.addGroup);
+  const addStandaloneTab = useTabStore((s) => s.addStandaloneTab);
   const renameProfile = useTabStore((s) => s.renameProfile);
-  const reorderGroups = useTabStore((s) => s.reorderGroups);
+  const reorderItems = useTabStore((s) => s.reorderItems);
   const moveTab = useTabStore((s) => s.moveTab);
+  const moveTabToGroup = useTabStore((s) => s.moveTabToGroup);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [activeType, setActiveType] = useState<'group' | 'tab' | null>(null);
+  const [activeType, setActiveType] = useState<'group' | 'tab' | 'standalone-tab' | null>(null);
+  const [dropIntoGroupId, setDropIntoGroupId] = useState<string | null>(null);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState<ChromeTabGroupColor>('blue');
+  const [showAddTab, setShowAddTab] = useState(false);
+  const [newTabUrl, setNewTabUrl] = useState('');
+  const [newTabTitle, setNewTabTitle] = useState('');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -42,45 +49,74 @@ export default function EditorArea() {
 
   if (!currentProfile) return null;
 
-  // 검색 필터 적용
-  const allGroups = currentProfile.groups;
-  const groups = searchQuery
-    ? allGroups
-        .map((g) => ({
-          ...g,
-          tabs: g.tabs.filter(
-            (t) =>
-              t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              t.url.toLowerCase().includes(searchQuery.toLowerCase()),
-          ),
-        }))
-        .filter((g) =>
-          g.tabs.length > 0 ||
-          g.name.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-    : allGroups;
-  const groupIds = groups.map((g) => g.id);
+  const allItems = currentProfile.items;
+
+  // 검색 필터
+  const items = searchQuery
+    ? allItems.filter((item) => {
+        const q = searchQuery.toLowerCase();
+        if (item.kind === 'group') {
+          if (item.group.name.toLowerCase().includes(q)) return true;
+          return item.group.tabs.some(
+            (t) => t.title.toLowerCase().includes(q) || t.url.toLowerCase().includes(q),
+          );
+        }
+        return item.tab.title.toLowerCase().includes(q) || item.tab.url.toLowerCase().includes(q);
+      })
+    : allItems;
+
+  // 최상위 정렬 ID
+  const topLevelIds = items.map((item) =>
+    item.kind === 'group' ? `g-${item.group.id}` : `st-${item.tab.id}`,
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
-    // 그룹 or 탭 판별
-    if (groups.some((g) => g.id === id)) {
-      setActiveId(id);
+    setActiveId(id);
+    if (id.startsWith('g-')) {
       setActiveType('group');
+    } else if (id.startsWith('st-')) {
+      setActiveType('standalone-tab');
     } else {
-      setActiveId(id);
       setActiveType('tab');
     }
   };
 
-  const handleDragOver = (_event: DragOverEvent) => {
-    // 드래그 오버 시 시각적 피드백 (DraggableGroup/Tab에서 처리)
-  };
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const activeIdStr = event.active.id as string;
+    // 탭이 그룹 헤더 위에 있으면 drop-into
+    if (activeIdStr.startsWith('g-')) {
+      setDropIntoGroupId(null);
+      return;
+    }
+    const overId = event.over?.id as string | undefined;
+    if (overId?.startsWith('g-')) {
+      const groupId = overId.slice(2);
+      // 그룹 내 탭이 자기 그룹 위에 있으면 무시
+      if (!activeIdStr.startsWith('st-')) {
+        // 일반 탭 (그룹 내부) — 소속 그룹과 같으면 무시
+        for (const item of allItems) {
+          if (item.kind === 'group' && item.group.id === groupId) {
+            if (item.group.tabs.some((t) => t.id === activeIdStr)) {
+              setDropIntoGroupId(null);
+              return;
+            }
+          }
+        }
+      }
+      setDropIntoGroupId(groupId);
+      return;
+    }
+    setDropIntoGroupId(null);
+  }, [allItems]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const currentDropIntoGroupId = dropIntoGroupId;
+
     setActiveId(null);
     setActiveType(null);
+    setDropIntoGroupId(null);
 
     if (!over) return;
 
@@ -89,35 +125,96 @@ export default function EditorArea() {
 
     if (activeIdStr === overIdStr) return;
 
-    if (activeType === 'group') {
-      // 그룹 순서 변경
-      const fromIndex = groups.findIndex((g) => g.id === activeIdStr);
-      const toIndex = groups.findIndex((g) => g.id === overIdStr);
-      if (fromIndex >= 0 && toIndex >= 0) {
-        reorderGroups(fromIndex, toIndex);
-      }
-    } else if (activeType === 'tab') {
-      // 탭 이동 (그룹 간)
-      let fromGroupId = '';
-      let toGroupId = '';
+    // Case 1: Drop into group (tab or standalone-tab → group header)
+    if (currentDropIntoGroupId || overIdStr.startsWith('g-')) {
+      const targetGroupId = currentDropIntoGroupId ?? overIdStr.slice(2);
 
-      for (const g of groups) {
-        if (g.tabs.some((t) => t.id === activeIdStr)) {
-          fromGroupId = g.id;
+      if (activeIdStr.startsWith('st-')) {
+        // 독립 탭 → 그룹
+        const tabId = activeIdStr.slice(3);
+        const targetGroup = allItems.find(
+          (i) => i.kind === 'group' && i.group.id === targetGroupId,
+        );
+        if (targetGroup && targetGroup.kind === 'group') {
+          moveTabToGroup(tabId, targetGroupId, targetGroup.group.tabs.length);
         }
-        if (g.id === overIdStr || g.tabs.some((t) => t.id === overIdStr)) {
-          toGroupId = g.id;
+      } else if (!activeIdStr.startsWith('g-')) {
+        // 그룹 내 탭 → 다른 그룹
+        const tabId = activeIdStr;
+        let fromGroupId = '';
+        for (const item of allItems) {
+          if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+            fromGroupId = item.group.id;
+            break;
+          }
+        }
+        if (fromGroupId && fromGroupId !== targetGroupId) {
+          const targetGroup = allItems.find(
+            (i) => i.kind === 'group' && i.group.id === targetGroupId,
+          );
+          if (targetGroup && targetGroup.kind === 'group') {
+            moveTab(fromGroupId, targetGroupId, tabId, targetGroup.group.tabs.length);
+          }
+        }
+      }
+      return;
+    }
+
+    // Case 2: Top-level item reorder (group ↔ standalone-tab)
+    if (
+      (activeIdStr.startsWith('g-') || activeIdStr.startsWith('st-')) &&
+      (overIdStr.startsWith('g-') || overIdStr.startsWith('st-'))
+    ) {
+      const fromIndex = topLevelIds.indexOf(activeIdStr);
+      const toIndex = topLevelIds.indexOf(overIdStr);
+      if (fromIndex >= 0 && toIndex >= 0) {
+        // Map to allItems indices (in case of filtering)
+        const activeItem = items[fromIndex];
+        const overItem = items[toIndex];
+        const realFrom = allItems.indexOf(activeItem);
+        const realTo = allItems.indexOf(overItem);
+        if (realFrom >= 0 && realTo >= 0) {
+          reorderItems(realFrom, realTo);
+        }
+      }
+      return;
+    }
+
+    // Case 3: Tab reorder within/between groups
+    if (!activeIdStr.startsWith('g-') && !activeIdStr.startsWith('st-')) {
+      const tabId = activeIdStr;
+      let fromGroupId = '';
+      for (const item of allItems) {
+        if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+          fromGroupId = item.group.id;
+          break;
+        }
+      }
+
+      if (!fromGroupId) return;
+
+      // Find target
+      let toGroupId = '';
+      if (!overIdStr.startsWith('g-') && !overIdStr.startsWith('st-')) {
+        // Over another tab — find its group
+        for (const item of allItems) {
+          if (item.kind === 'group' && item.group.tabs.some((t) => t.id === overIdStr)) {
+            toGroupId = item.group.id;
+            break;
+          }
         }
       }
 
       if (fromGroupId && toGroupId) {
-        const toGroup = groups.find((g) => g.id === toGroupId);
-        let newIndex = toGroup?.tabs.length ?? 0;
-        if (toGroup) {
-          const overTabIdx = toGroup.tabs.findIndex((t) => t.id === overIdStr);
+        const toGroup = allItems.find(
+          (i) => i.kind === 'group' && i.group.id === toGroupId,
+        );
+        if (toGroup && toGroup.kind === 'group') {
+          let newIndex = toGroup.group.tabs.length;
+          const overTabIdx = toGroup.group.tabs.findIndex((t) => t.id === overIdStr);
           if (overTabIdx >= 0) newIndex = overTabIdx;
+          moveTab(fromGroupId, toGroupId, tabId, newIndex);
         }
-        moveTab(fromGroupId, toGroupId, activeIdStr, newIndex);
       }
     }
   };
@@ -128,6 +225,19 @@ export default function EditorArea() {
     setNewGroupName('');
     setNewGroupColor('blue');
     setShowAddGroup(false);
+  };
+
+  const handleAddTab = () => {
+    if (!newTabUrl.trim()) return;
+    addStandaloneTab({
+      url: newTabUrl.trim(),
+      title: newTabTitle.trim() || newTabUrl.trim(),
+      favIconUrl: null,
+      pinned: false,
+    });
+    setNewTabUrl('');
+    setNewTabTitle('');
+    setShowAddTab(false);
   };
 
   return (
@@ -142,7 +252,7 @@ export default function EditorArea() {
               inputClassName="text-lg font-bold w-64"
             />
             <p className="text-xs text-gray-500">
-              {allGroups.length}개 그룹 · {allGroups.reduce((s, g) => s + g.tabs.length, 0)}개 탭
+              {profileGroupCount(currentProfile)}개 그룹 · {profileTabCount(currentProfile)}개 탭
             </p>
           </div>
         </div>
@@ -155,42 +265,71 @@ export default function EditorArea() {
         />
         {searchQuery && (
           <p className="text-xs text-gray-400">
-            {groups.length}개 그룹 · {groups.reduce((s, g) => s + g.tabs.length, 0)}개 탭 일치
+            {items.length}개 항목 일치
           </p>
         )}
       </div>
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-3">
-            {groups.map((group) => (
-              <DraggableGroup key={group.id} group={group} />
-            ))}
+            {items.map((item) => {
+              if (item.kind === 'group') {
+                return (
+                  <DraggableGroup
+                    key={item.group.id}
+                    group={item.group}
+                    isDropTarget={dropIntoGroupId === item.group.id}
+                  />
+                );
+              }
+              return (
+                <DraggableStandaloneTab
+                  key={item.tab.id}
+                  tab={item.tab}
+                />
+              );
+            })}
           </div>
         </SortableContext>
 
         <DragOverlay>
           {activeId && activeType === 'group' && (
             <div className="opacity-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-3 text-sm">
-              {groups.find((g) => g.id === activeId)?.name}
+              {allItems.find((i) => i.kind === 'group' && i.group.id === activeId.slice(2))?.kind === 'group'
+                ? (allItems.find((i) => i.kind === 'group' && i.group.id === activeId.slice(2)) as { kind: 'group'; group: { name: string } }).group.name
+                : ''}
             </div>
           )}
-          {activeId && activeType === 'tab' && (
+          {activeId && (activeType === 'tab' || activeType === 'standalone-tab') && (
             <div className="opacity-80 bg-white dark:bg-gray-800 rounded shadow border px-3 py-1.5 text-xs">
-              {groups.flatMap((g) => g.tabs).find((t) => t.id === activeId)?.title}
+              {(() => {
+                const tabId = activeType === 'standalone-tab' ? activeId.slice(3) : activeId;
+                // 독립 탭에서 찾기
+                const standalone = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
+                if (standalone?.kind === 'tab') return standalone.tab.title;
+                // 그룹 내 탭에서 찾기
+                for (const item of allItems) {
+                  if (item.kind === 'group') {
+                    const t = item.group.tabs.find((t) => t.id === tabId);
+                    if (t) return t.title;
+                  }
+                }
+                return '';
+              })()}
             </div>
           )}
         </DragOverlay>
       </DndContext>
 
-      {/* 그룹 추가 */}
-      <div className="mt-4">
+      {/* 추가 버튼 */}
+      <div className="mt-4 space-y-2">
         {showAddGroup ? (
           <div className="card p-3 space-y-2">
             <input
@@ -210,7 +349,6 @@ export default function EditorArea() {
                   className={`w-6 h-6 rounded-full border-2 ${
                     newGroupColor === c ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent'
                   }`}
-                  style={{ backgroundColor: `var(--color-chrome-${c}, ${c})` }}
                   title={c}
                 >
                   <span
@@ -236,13 +374,52 @@ export default function EditorArea() {
               </button>
             </div>
           </div>
+        ) : showAddTab ? (
+          <div className="card p-3 space-y-2">
+            <input
+              type="text"
+              placeholder="URL"
+              value={newTabUrl}
+              onChange={(e) => setNewTabUrl(e.target.value)}
+              className="input text-xs"
+              autoFocus
+            />
+            <input
+              type="text"
+              placeholder="제목 (선택)"
+              value={newTabTitle}
+              onChange={(e) => setNewTabTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTab()}
+              className="input text-xs"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAddTab(false)} className="btn-secondary text-xs">
+                취소
+              </button>
+              <button
+                onClick={handleAddTab}
+                disabled={!newTabUrl.trim()}
+                className="btn-primary text-xs disabled:opacity-50"
+              >
+                추가
+              </button>
+            </div>
+          </div>
         ) : (
-          <button
-            onClick={() => setShowAddGroup(true)}
-            className="btn-secondary text-xs w-full"
-          >
-            + 그룹 추가
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAddGroup(true)}
+              className="btn-secondary text-xs flex-1"
+            >
+              + 그룹 추가
+            </button>
+            <button
+              onClick={() => setShowAddTab(true)}
+              className="btn-secondary text-xs flex-1"
+            >
+              + 탭 추가
+            </button>
+          </div>
         )}
       </div>
     </div>

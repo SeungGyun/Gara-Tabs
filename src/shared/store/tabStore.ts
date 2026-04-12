@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Profile, Group, Tab } from '../types';
+import type { Profile, Group, Tab, ProfileItem } from '../types';
 import { generateId } from '../utils/uuid';
 import { MAX_UNDO_HISTORY } from '../constants';
 
@@ -23,13 +23,26 @@ interface EditorState {
   addGroup: (group: Omit<Group, 'id' | 'tabs'>) => void;
   updateGroup: (groupId: string, updates: Partial<Omit<Group, 'id' | 'tabs'>>) => void;
   deleteGroup: (groupId: string) => void;
-  reorderGroups: (fromIndex: number, toIndex: number) => void;
 
-  // 탭 CRUD
+  // 독립 탭 CRUD
+  addStandaloneTab: (tab: Omit<Tab, 'id'>) => void;
+  deleteStandaloneTab: (tabId: string) => void;
+
+  // 아이템 재정렬 (그룹+독립탭 혼합)
+  reorderItems: (fromIndex: number, toIndex: number) => void;
+
+  // 그룹 내 탭 CRUD
   addTab: (groupId: string, tab: Omit<Tab, 'id'>) => void;
   updateTab: (groupId: string, tabId: string, updates: Partial<Omit<Tab, 'id'>>) => void;
   deleteTab: (groupId: string, tabId: string) => void;
   moveTab: (fromGroupId: string, toGroupId: string, tabId: string, newIndex: number) => void;
+
+  // 독립 탭 ↔ 그룹 이동
+  moveTabToGroup: (tabId: string, targetGroupId: string, newIndex: number) => void;
+  moveTabToStandalone: (groupId: string, tabId: string, itemIndex: number) => void;
+
+  // 독립 탭 속성 수정
+  updateStandaloneTab: (tabId: string, updates: Partial<Omit<Tab, 'id'>>) => void;
 
   // Undo/Redo
   undo: () => void;
@@ -57,6 +70,14 @@ function withHistory(
   const updated = mutate(structuredClone(state.currentProfile));
   updated.updatedAt = Date.now();
   set({ ...historyUpdate, currentProfile: updated });
+}
+
+// items에서 그룹 찾기
+function findGroup(items: ProfileItem[], groupId: string): Group | undefined {
+  for (const item of items) {
+    if (item.kind === 'group' && item.group.id === groupId) return item.group;
+  }
+  return undefined;
 }
 
 export const useTabStore = create<EditorState>((set, get) => ({
@@ -94,14 +115,14 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
   addGroup: (group) => {
     withHistory(get, set, (p) => {
-      p.groups.push({ ...group, id: generateId(), tabs: [] });
+      p.items.push({ kind: 'group', group: { ...group, id: generateId(), tabs: [] } });
       return p;
     });
   },
 
   updateGroup: (groupId, updates) => {
     withHistory(get, set, (p) => {
-      const g = p.groups.find((g) => g.id === groupId);
+      const g = findGroup(p.items, groupId);
       if (g) Object.assign(g, updates);
       return p;
     });
@@ -109,28 +130,48 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
   deleteGroup: (groupId) => {
     withHistory(get, set, (p) => {
-      p.groups = p.groups.filter((g) => g.id !== groupId);
+      p.items = p.items.filter((i) => !(i.kind === 'group' && i.group.id === groupId));
       return p;
     });
-    const state = get();
-    if (state.selectedItemId === groupId) {
+    if (get().selectedItemId === groupId) {
       set({ selectedItemId: null, selectedItemType: null });
     }
   },
 
-  reorderGroups: (fromIndex, toIndex) => {
+  // ── 독립 탭 CRUD ──
+
+  addStandaloneTab: (tab) => {
     withHistory(get, set, (p) => {
-      const [moved] = p.groups.splice(fromIndex, 1);
-      p.groups.splice(toIndex, 0, moved);
+      p.items.push({ kind: 'tab', tab: { ...tab, id: generateId() } });
       return p;
     });
   },
 
-  // ── 탭 CRUD ──
+  deleteStandaloneTab: (tabId) => {
+    withHistory(get, set, (p) => {
+      p.items = p.items.filter((i) => !(i.kind === 'tab' && i.tab.id === tabId));
+      return p;
+    });
+    if (get().selectedItemId === tabId) {
+      set({ selectedItemId: null, selectedItemType: null });
+    }
+  },
+
+  // ── 아이템 재정렬 ──
+
+  reorderItems: (fromIndex, toIndex) => {
+    withHistory(get, set, (p) => {
+      const [moved] = p.items.splice(fromIndex, 1);
+      p.items.splice(toIndex, 0, moved);
+      return p;
+    });
+  },
+
+  // ── 그룹 내 탭 CRUD ──
 
   addTab: (groupId, tab) => {
     withHistory(get, set, (p) => {
-      const g = p.groups.find((g) => g.id === groupId);
+      const g = findGroup(p.items, groupId);
       if (g) g.tabs.push({ ...tab, id: generateId() });
       return p;
     });
@@ -138,7 +179,7 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
   updateTab: (groupId, tabId, updates) => {
     withHistory(get, set, (p) => {
-      const g = p.groups.find((g) => g.id === groupId);
+      const g = findGroup(p.items, groupId);
       const t = g?.tabs.find((t) => t.id === tabId);
       if (t) Object.assign(t, updates);
       return p;
@@ -147,20 +188,19 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
   deleteTab: (groupId, tabId) => {
     withHistory(get, set, (p) => {
-      const g = p.groups.find((g) => g.id === groupId);
+      const g = findGroup(p.items, groupId);
       if (g) g.tabs = g.tabs.filter((t) => t.id !== tabId);
       return p;
     });
-    const state = get();
-    if (state.selectedItemId === tabId) {
+    if (get().selectedItemId === tabId) {
       set({ selectedItemId: null, selectedItemType: null });
     }
   },
 
   moveTab: (fromGroupId, toGroupId, tabId, newIndex) => {
     withHistory(get, set, (p) => {
-      const fromGroup = p.groups.find((g) => g.id === fromGroupId);
-      const toGroup = p.groups.find((g) => g.id === toGroupId);
+      const fromGroup = findGroup(p.items, fromGroupId);
+      const toGroup = findGroup(p.items, toGroupId);
       if (!fromGroup || !toGroup) return p;
 
       const tabIndex = fromGroup.tabs.findIndex((t) => t.id === tabId);
@@ -168,6 +208,42 @@ export const useTabStore = create<EditorState>((set, get) => ({
 
       const [tab] = fromGroup.tabs.splice(tabIndex, 1);
       toGroup.tabs.splice(newIndex, 0, tab);
+      return p;
+    });
+  },
+
+  // ── 독립 탭 ↔ 그룹 이동 ──
+
+  moveTabToGroup: (tabId, targetGroupId, newIndex) => {
+    withHistory(get, set, (p) => {
+      const itemIdx = p.items.findIndex((i) => i.kind === 'tab' && i.tab.id === tabId);
+      if (itemIdx === -1) return p;
+      const tab = (p.items[itemIdx] as { kind: 'tab'; tab: Tab }).tab;
+      p.items.splice(itemIdx, 1);
+
+      const group = findGroup(p.items, targetGroupId);
+      if (group) group.tabs.splice(newIndex, 0, tab);
+      return p;
+    });
+  },
+
+  moveTabToStandalone: (groupId, tabId, itemIndex) => {
+    withHistory(get, set, (p) => {
+      const group = findGroup(p.items, groupId);
+      if (!group) return p;
+      const tabIdx = group.tabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return p;
+
+      const [tab] = group.tabs.splice(tabIdx, 1);
+      p.items.splice(itemIndex, 0, { kind: 'tab', tab });
+      return p;
+    });
+  },
+
+  updateStandaloneTab: (tabId, updates) => {
+    withHistory(get, set, (p) => {
+      const item = p.items.find((i) => i.kind === 'tab' && i.tab.id === tabId);
+      if (item && item.kind === 'tab') Object.assign(item.tab, updates);
       return p;
     });
   },

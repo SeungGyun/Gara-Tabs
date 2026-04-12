@@ -19,20 +19,14 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
     try {
       const result = await chrome.runtime.sendMessage({ type: 'GET_CURRENT_TABS' });
       if (result?.tabs) {
-        // 현재 열린 탭 정보를 그룹으로 변환하여 추가
-        const { addGroup, addTab } = useTabStore.getState();
-        addGroup({ name: '현재 탭', color: 'blue', domain: null });
-        const state = useTabStore.getState();
-        const newGroup = state.currentProfile?.groups[state.currentProfile.groups.length - 1];
-        if (newGroup) {
-          for (const tab of result.tabs as chrome.tabs.Tab[]) {
-            addTab(newGroup.id, {
-              url: tab.url ?? '',
-              title: tab.title ?? '',
-              favIconUrl: tab.favIconUrl ?? null,
-              pinned: tab.pinned ?? false,
-            });
-          }
+        const { addStandaloneTab } = useTabStore.getState();
+        for (const tab of result.tabs as chrome.tabs.Tab[]) {
+          addStandaloneTab({
+            url: tab.url ?? '',
+            title: tab.title ?? '',
+            favIconUrl: tab.favIconUrl ?? null,
+            pinned: tab.pinned ?? false,
+          });
         }
       }
     } catch {
@@ -63,7 +57,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
         const imported = JSON.parse(text);
         const arr = Array.isArray(imported) ? imported : [imported];
         for (const p of arr) {
-          if (p && p.name && p.groups) {
+          if (p && p.name && (p.items || p.groups)) {
             await useProfileStore.getState().saveProfile({
               ...p,
               id: p.id ?? crypto.randomUUID(),

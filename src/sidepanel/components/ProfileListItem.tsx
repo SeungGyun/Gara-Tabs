@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Profile, ProfileSnapshot, LoadProfileOption } from '../../shared/types';
+import { profileTabCount, profileGroupCount } from '../../shared/types';
 import { useProfileStore } from '../../shared/store/profileStore';
 import { COLOR_MAP } from '../../shared/utils/colors';
 import InlineEditText from '../../shared/components/InlineEditText';
@@ -24,7 +25,8 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
   const getHistory = useProfileStore((s) => s.getHistory);
   const restoreFromHistory = useProfileStore((s) => s.restoreFromHistory);
 
-  const totalTabs = profile.groups.reduce((sum, g) => sum + g.tabs.length, 0);
+  const totalTabs = profileTabCount(profile);
+  const groupCount = profileGroupCount(profile);
 
   const handleLoad = async (option: LoadProfileOption) => {
     if (option === 'cancel') {
@@ -66,10 +68,13 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
     clone.name = profile.name + ' (복사)';
     clone.createdAt = Date.now();
     clone.updatedAt = Date.now();
-    // 그룹/탭 ID도 새로 생성
-    for (const g of clone.groups) {
-      g.id = generateId();
-      for (const t of g.tabs) t.id = generateId();
+    for (const item of clone.items) {
+      if (item.kind === 'group') {
+        item.group.id = generateId();
+        for (const t of item.group.tabs) t.id = generateId();
+      } else {
+        item.tab.id = generateId();
+      }
     }
     await saveProfile(clone);
     onShowToast(`"${clone.name}" 프로필이 복제되었습니다.`);
@@ -125,7 +130,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             inputClassName="text-sm font-medium w-full"
           />
           <div className="text-xs text-gray-500">
-            {profile.groups.length}개 그룹 · {totalTabs}개 탭
+            {groupCount}개 그룹 · {totalTabs}개 탭
           </div>
         </div>
         <div className="text-xs text-gray-400">
@@ -209,7 +214,8 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                 <p className="text-xs text-gray-400 px-1 py-2">히스토리가 없습니다.</p>
               ) : (
                 historyList.map((snap) => {
-                  const tabCount = snap.profile.groups.reduce((s, g) => s + g.tabs.length, 0);
+                  const tabCount = profileTabCount(snap.profile);
+                  const gCount = profileGroupCount(snap.profile);
                   return (
                     <div
                       key={snap.timestamp}
@@ -223,7 +229,7 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
                           })}
                         </span>
                         <span className="text-gray-400 ml-1.5">
-                          {snap.profile.groups.length}그룹 · {tabCount}탭
+                          {gCount}그룹 · {tabCount}탭
                         </span>
                       </div>
                       <button
@@ -239,44 +245,62 @@ export default function ProfileListItem({ profile, onDelete, onShowToast }: Prop
             </div>
           )}
 
-          {/* 그룹/탭 트리 */}
+          {/* 아이템 트리 (그룹 + 독립 탭) */}
           <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
-            {profile.groups.map((group) => (
-              <div key={group.id}>
-                <div className="flex items-center gap-1.5 px-2 py-1">
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: COLOR_MAP[group.color] }}
-                  />
-                  <span className="text-xs font-medium truncate">{group.name}</span>
-                  <span className="text-xs text-gray-400">({group.tabs.length})</span>
-                </div>
-                {group.tabs.map((tab) => (
-                  <div
-                    key={tab.id}
-                    className="flex items-center gap-1.5 pl-6 pr-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
-                    title={`${tab.url}\n클릭하여 새 탭에서 열기`}
-                    onClick={() => handleTabClick(tab.url)}
-                  >
-                    {tab.favIconUrl ? (
-                      <img
-                        src={tab.favIconUrl}
-                        alt=""
-                        className="w-3 h-3 flex-shrink-0"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
+            {profile.items.map((item) => {
+              if (item.kind === 'group') {
+                const group = item.group;
+                return (
+                  <div key={group.id}>
+                    <div className="flex items-center gap-1.5 px-2 py-1">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: COLOR_MAP[group.color] }}
                       />
-                    ) : (
-                      <span className="w-3 h-3 rounded bg-gray-300 flex-shrink-0" />
-                    )}
-                    <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
-                      {tab.title || tab.url}
-                    </span>
+                      <span className="text-xs font-medium truncate">{group.name}</span>
+                      <span className="text-xs text-gray-400">({group.tabs.length})</span>
+                    </div>
+                    {group.tabs.map((tab) => (
+                      <div
+                        key={tab.id}
+                        className="flex items-center gap-1.5 pl-6 pr-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                        title={`${tab.url}\n클릭하여 새 탭에서 열기`}
+                        onClick={() => handleTabClick(tab.url)}
+                      >
+                        {tab.favIconUrl ? (
+                          <img src={tab.favIconUrl} alt="" className="w-3 h-3 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <span className="w-3 h-3 rounded bg-gray-300 flex-shrink-0" />
+                        )}
+                        <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                          {tab.title || tab.url}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ))}
+                );
+              }
+              // 독립 탭
+              const tab = item.tab;
+              return (
+                <div
+                  key={tab.id}
+                  className="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                  title={`${tab.url}\n클릭하여 새 탭에서 열기`}
+                  onClick={() => handleTabClick(tab.url)}
+                >
+                  {tab.pinned && <span className="text-[10px]">📌</span>}
+                  {tab.favIconUrl ? (
+                    <img src={tab.favIconUrl} alt="" className="w-3 h-3 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  ) : (
+                    <span className="w-3 h-3 rounded bg-gray-300 flex-shrink-0" />
+                  )}
+                  <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                    {tab.title || tab.url}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

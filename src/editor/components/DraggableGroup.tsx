@@ -10,9 +10,10 @@ import DraggableTab from './DraggableTab';
 
 interface Props {
   group: Group;
+  isDropTarget?: boolean;
 }
 
-export default function DraggableGroup({ group }: Props) {
+export default function DraggableGroup({ group, isDropTarget }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [showAddTab, setShowAddTab] = useState(false);
   const [newTabUrl, setNewTabUrl] = useState('');
@@ -31,7 +32,7 @@ export default function DraggableGroup({ group }: Props) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: group.id });
+  } = useSortable({ id: `g-${group.id}` });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,7 +63,7 @@ export default function DraggableGroup({ group }: Props) {
     <div
       ref={setNodeRef}
       className={`rounded-lg border-l-4 overflow-hidden shadow-sm ${
-        isSelected ? 'ring-2 ring-blue-400' : ''
+        isDropTarget ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-blue-400' : ''
       }`}
       style={{ ...style, borderLeftColor: borderColor, backgroundColor: bgColor + '30' }}
     >

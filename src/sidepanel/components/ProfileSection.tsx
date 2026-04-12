@@ -22,12 +22,12 @@ export default function ProfileSection({ onShowToast }: Props) {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     if (p.name.toLowerCase().includes(q)) return true;
-    return p.groups.some((g) =>
-      g.tabs.some(
-        (t) =>
-          t.title.toLowerCase().includes(q) || t.url.toLowerCase().includes(q),
-      ),
-    );
+    return p.items.some((item) => {
+      const tabs = item.kind === 'group'
+        ? [item.group.name, ...item.group.tabs.map((t) => `${t.title} ${t.url}`)]
+        : [`${item.tab.title} ${item.tab.url}`];
+      return tabs.some((s) => s.toLowerCase().includes(q));
+    });
   });
 
   const handleSave = async () => {
@@ -84,7 +84,7 @@ export default function ProfileSection({ onShowToast }: Props) {
         const arr = Array.isArray(imported) ? imported : [imported];
         let count = 0;
         for (const p of arr) {
-          if (p && p.name && p.groups) {
+          if (p && p.name && (p.items || p.groups)) {
             await useProfileStore.getState().saveProfile({
               ...p,
               id: p.id ?? crypto.randomUUID(),
