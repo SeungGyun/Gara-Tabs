@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Gara — Tab Manager</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #222; }
+    h1 { font-size: 1.6em; border-bottom: 2px solid #eee; padding-bottom: 12px; }
+    h2 { font-size: 1.2em; margin-top: 32px; }
+    h3 { font-size: 1em; margin-top: 24px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    th { background: #f5f5f5; }
+    ul { padding-left: 20px; }
+    a { color: #0969da; }
+    code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy — Gara — Tab Manager</h1>
+  <p><strong>Last updated: April 12, 2026</strong></p>
+
+  <h2>Overview</h2>
+  <p>Gara — Tab Manager ("the Extension") is a Chrome extension that helps users organize, save, and restore browser tabs as named profiles. Your privacy is important to us. This policy explains what data the Extension accesses and how it is handled.</p>
+
+  <h2>Data Collection</h2>
+
+  <h3>What we access</h3>
+  <p>The Extension accesses the following browser data solely to provide its core functionality:</p>
+  <ul>
+    <li><strong>Tab URLs and titles</strong> — to save and restore tab sessions as profiles</li>
+    <li><strong>Tab group information</strong> — to preserve group names, colors, and collapsed states</li>
+  </ul>
+
+  <h3>What we store</h3>
+  <p>All data is stored <strong>locally on your device</strong> using Chrome's built-in <code>chrome.storage.local</code> API. This includes:</p>
+  <ul>
+    <li>Saved profiles (tab URLs, titles, and group information)</li>
+    <li>User settings and preferences (subdomain rules, auto-group rules, exclude patterns)</li>
+  </ul>
+
+  <h3>What we do NOT collect</h3>
+  <ul>
+    <li>No personal identification information</li>
+    <li>No authentication credentials</li>
+    <li>No browsing history beyond what you explicitly save as a profile</li>
+    <li>No analytics or usage tracking data</li>
+    <li>No financial or health information</li>
+    <li>No location data</li>
+  </ul>
+
+  <h2>Data Sharing</h2>
+  <p><strong>We do not sell, transfer, or share any user data with third parties.</strong> All data remains on your local device.</p>
+
+  <h2>Data Retention</h2>
+  <ul>
+    <li>Profile data persists until you manually delete it</li>
+    <li>Profile version history is automatically retained for 2 days, then discarded</li>
+    <li>Uninstalling the Extension removes all stored data</li>
+  </ul>
+
+  <h2>Remote Code</h2>
+  <p>The Extension does not load or execute any remotely hosted code. All code is bundled within the Extension package.</p>
+
+  <h2>Permissions</h2>
+  <table>
+    <tr><th>Permission</th><th>Purpose</th></tr>
+    <tr><td><code>tabs</code></td><td>Read open tab URLs, titles, and positions to save/restore profiles</td></tr>
+    <tr><td><code>tabGroups</code></td><td>Read and create Chrome tab groups when saving/restoring profiles</td></tr>
+    <tr><td><code>storage</code></td><td>Persist profiles and settings locally on the device</td></tr>
+    <tr><td><code>sidePanel</code></td><td>Display the tab manager UI in Chrome's side panel</td></tr>
+    <tr><td><code>activeTab</code></td><td>Identify the currently active tab for user-initiated actions</td></tr>
+  </table>
+
+  <h2>Changes to This Policy</h2>
+  <p>If this policy is updated, the changes will be posted on this page with an updated revision date.</p>
+
+  <h2>Contact</h2>
+  <p>If you have questions about this privacy policy, please open an issue at <a href="https://github.com/SeungGyun/Gara-Tabs/issues">github.com/SeungGyun/Gara-Tabs/issues</a>.</p>
+</body>
+</html>
