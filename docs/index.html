@@ -1,5 +1,164 @@
 <!DOCTYPE html>
-<html>
-<head><meta http-equiv="refresh" content="0;url=privacy-policy.html"></head>
-<body></body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gara — Tab Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; background: #fafbff; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 20px 60px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .hero-icon { width: 96px; height: 96px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); margin-bottom: 24px; }
+    .hero h1 { font-size: 2.4em; font-weight: 700; margin-bottom: 12px; }
+    .hero p { font-size: 1.15em; opacity: 0.92; max-width: 520px; margin: 0 auto 32px; line-height: 1.6; }
+    .cta {
+      display: inline-block;
+      background: #fff;
+      color: #764ba2;
+      font-weight: 600;
+      font-size: 1em;
+      padding: 14px 36px;
+      border-radius: 50px;
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cta:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.2); }
+
+    /* Features */
+    .features { max-width: 900px; margin: 0 auto; padding: 60px 20px; }
+    .features h2 { text-align: center; font-size: 1.8em; margin-bottom: 48px; color: #1a1a2e; }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px; }
+    .feature-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border: 1px solid #eef0f6;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+    .feature-icon { font-size: 2em; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 1.1em; margin-bottom: 8px; color: #333; }
+    .feature-card p { font-size: 0.92em; color: #666; line-height: 1.6; }
+
+    /* Tech */
+    .tech {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px 60px;
+      text-align: center;
+    }
+    .tech h2 { font-size: 1.4em; margin-bottom: 20px; color: #1a1a2e; }
+    .tech-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .tech-tag {
+      background: #f0f0f8;
+      color: #555;
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-size: 0.88em;
+      font-weight: 500;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 32px 20px;
+      border-top: 1px solid #eee;
+      color: #999;
+      font-size: 0.85em;
+    }
+    footer a { color: #764ba2; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <img src="https://raw.githubusercontent.com/SeungGyun/Gara-Tabs/master/src/assets/icons/icon128.png" alt="Gara icon" class="hero-icon">
+    <h1>Gara — Tab Manager</h1>
+    <p>Tame your tabs. Auto-group by domain, save sessions as profiles, and restore everything in one click.</p>
+    <a href="https://github.com/SeungGyun/Gara-Tabs" class="cta">View on GitHub</a>
+  </section>
+
+  <section class="features">
+    <h2>Features</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">💾</div>
+        <h3>Save &amp; Restore</h3>
+        <p>Capture all open tabs and groups as a named profile. Reload them anytime, even after a restart.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📂</div>
+        <h3>Auto-Group</h3>
+        <p>Instantly organize scattered tabs into color-coded groups by domain. No manual sorting needed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✋</div>
+        <h3>Drag &amp; Drop Editor</h3>
+        <p>Open the full-page editor to rearrange tabs, rename groups, change colors, and fine-tune your workspace.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⏪</div>
+        <h3>Version History</h3>
+        <p>Made a mistake? Roll back to a previous version of any profile with automatic 2-day history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🚫</div>
+        <h3>Exclude &amp; Filter</h3>
+        <p>Set rules to exclude domains or URL patterns you never want saved.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌙</div>
+        <h3>Dark Mode</h3>
+        <p>Seamlessly follows your system theme for comfortable browsing day and night.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <h3>8 Languages</h3>
+        <p>English, Korean, Japanese, Chinese, German, French, Spanish, and Portuguese.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📌</div>
+        <h3>Side Panel</h3>
+        <p>Lives in Chrome's built-in side panel — always one click away, never in your way.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Private &amp; Local</h3>
+        <p>No account required. No data leaves your browser. Just fast, private tab management.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech">
+    <h2>Built With</h2>
+    <div class="tech-tags">
+      <span class="tech-tag">React 18</span>
+      <span class="tech-tag">TypeScript</span>
+      <span class="tech-tag">Vite + CRXJS</span>
+      <span class="tech-tag">Zustand</span>
+      <span class="tech-tag">Tailwind CSS</span>
+      <span class="tech-tag">dnd-kit</span>
+      <span class="tech-tag">Chrome Manifest V3</span>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://github.com/SeungGyun/Gara-Tabs">GitHub</a> &middot;
+      <a href="privacy-policy.html">Privacy Policy</a>
+    </p>
+    <p style="margin-top: 8px;">&copy; 2026 SeungGyun. All rights reserved.</p>
+  </footer>
+
+</body>
 </html>
