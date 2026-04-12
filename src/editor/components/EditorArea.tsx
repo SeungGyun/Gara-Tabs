@@ -1,30 +1,17 @@
-import { useState, useCallback, Fragment } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
   closestCenter,
-  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  useDroppable,
+  MeasuringStrategy,
   type DragStartEvent,
   type DragEndEvent,
-  type DragOverEvent,
-  type CollisionDetection,
+  type DragMoveEvent,
 } from '@dnd-kit/core';
-
-// 탭/갭을 그룹 헤더보다 우선 감지 — 그룹 내 위치 지정 가능
-const preferInnerTarget: CollisionDetection = (args) => {
-  const pw = pointerWithin(args);
-  if (pw.length > 0) {
-    const nonGroup = pw.filter((c) => !String(c.id).startsWith('g-'));
-    if (nonGroup.length > 0) return nonGroup;
-    return pw;
-  }
-  return closestCenter(args);
-};
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -35,21 +22,13 @@ import InlineEditText from '../../shared/components/InlineEditText';
 import DraggableGroup from './DraggableGroup';
 import DraggableStandaloneTab from './DraggableStandaloneTab';
 
-// ── 아이템 사이 갭 (space-y-3 대체, 항상 고정 높이) ──
+// ── 드롭 인디케이터 타입 ──
 
-function ItemGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraggingTab });
+export type DropPosition = 'before' | 'after' | 'inside';
 
-  return (
-    <div
-      ref={setNodeRef}
-      className={`h-3 rounded-sm transition-colors duration-150 ${
-        isDraggingTab && isOver
-          ? 'bg-blue-400 dark:bg-blue-500'
-          : ''
-      }`}
-    />
-  );
+export interface DropIndicatorState {
+  targetId: string;
+  position: DropPosition;
 }
 
 export default function EditorArea() {
@@ -64,7 +43,8 @@ export default function EditorArea() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'group' | 'tab' | 'standalone-tab' | null>(null);
-  const [dropIntoGroupId, setDropIntoGroupId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicatorState | null>(null);
+  const dropIndicatorRef = useRef<DropIndicatorState | null>(null);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState<ChromeTabGroupColor>('blue');
@@ -100,8 +80,6 @@ export default function EditorArea() {
     item.kind === 'group' ? `g-${item.group.id}` : `st-${item.tab.id}`,
   );
 
-  const isDraggingTab = activeType === 'tab' || activeType === 'standalone-tab';
-
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
     setActiveId(id);
@@ -114,85 +92,132 @@ export default function EditorArea() {
     }
   };
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const activeIdStr = event.active.id as string;
-    if (activeIdStr.startsWith('g-')) {
-      setDropIntoGroupId(null);
+  // 탭 ID → 소속 그룹 ID 찾기
+  const findParentGroupId = useCallback((tabId: string): string | null => {
+    for (const item of allItems) {
+      if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+        return item.group.id;
+      }
+    }
+    return null;
+  }, [allItems]);
+
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    const { active, over } = event;
+    if (!over || !active) {
+      setDropIndicator(null);
+      dropIndicatorRef.current = null;
       return;
     }
-    const overId = event.over?.id as string | undefined;
-    // 갭 위 → drop-into 해제
-    if (overId?.startsWith('gap-')) {
-      setDropIntoGroupId(null);
+
+    const activeIdStr = active.id as string;
+    let overId = over.id as string;
+    if (activeIdStr === overId) {
+      setDropIndicator(null);
+      dropIndicatorRef.current = null;
       return;
     }
-    if (overId?.startsWith('g-')) {
-      const groupId = overId.slice(2);
-      if (!activeIdStr.startsWith('st-')) {
-        for (const item of allItems) {
-          if (item.kind === 'group' && item.group.id === groupId) {
-            if (item.group.tabs.some((t) => t.id === activeIdStr)) {
-              setDropIntoGroupId(null);
-              return;
-            }
+
+    const overRect = over.rect;
+    if (!overRect) {
+      setDropIndicator(null);
+      dropIndicatorRef.current = null;
+      return;
+    }
+
+    const pointerY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
+    const relativeY = pointerY - overRect.top;
+    const height = overRect.height;
+
+    // 그룹 내부 탭 위에 호버 → 경계(첫/끝 탭)이면 부모 그룹으로 리졸브
+    if (!overId.startsWith('g-') && !overId.startsWith('st-')) {
+      const parentGroupId = findParentGroupId(overId);
+      if (parentGroupId) {
+        const parentGroup = allItems.find((i) => i.kind === 'group' && i.group.id === parentGroupId);
+        if (parentGroup && parentGroup.kind === 'group') {
+          const tabIndex = parentGroup.group.tabs.findIndex((t) => t.id === overId);
+          const isFirstTab = tabIndex === 0;
+          const isLastTab = tabIndex === parentGroup.group.tabs.length - 1;
+          const rawPosition = relativeY < height * 0.5 ? 'before' : 'after';
+
+          // 그룹 드래그: 항상 부모 그룹으로 리졸브
+          if (activeIdStr.startsWith('g-')) {
+            const isUpperHalf = tabIndex < parentGroup.group.tabs.length / 2;
+            const indicator = {
+              targetId: `g-${parentGroupId}`,
+              position: (isUpperHalf ? 'before' : 'after') as DropPosition,
+            };
+            setDropIndicator(indicator);
+            dropIndicatorRef.current = indicator;
+            return;
+          }
+
+          // 탭 드래그: 첫 탭 before → 그룹 앞으로, 끝 탭 after → 그룹 뒤로
+          if (isFirstTab && rawPosition === 'before') {
+            const indicator = { targetId: `g-${parentGroupId}`, position: 'before' as DropPosition };
+            setDropIndicator(indicator);
+            dropIndicatorRef.current = indicator;
+            return;
+          }
+          if (isLastTab && rawPosition === 'after') {
+            const indicator = { targetId: `g-${parentGroupId}`, position: 'after' as DropPosition };
+            setDropIndicator(indicator);
+            dropIndicatorRef.current = indicator;
+            return;
           }
         }
       }
-      setDropIntoGroupId(groupId);
-      return;
     }
-    setDropIntoGroupId(null);
-  }, [allItems]);
+
+    let position: DropPosition;
+
+    if (overId.startsWith('g-')) {
+      // 그룹 헤더 기준 — 헤더 실제 높이(~40px)로 판단
+      const HEADER_H = 40;
+      if (activeIdStr.startsWith('g-')) {
+        // 그룹→그룹: before/after만
+        position = relativeY < height * 0.5 ? 'before' : 'after';
+      } else if (relativeY < HEADER_H * 0.5) {
+        // 제목 상단 50% → 그룹과 같은 레이어 (before)
+        position = 'before';
+      } else if (relativeY < HEADER_H) {
+        // 제목 하단 50% → 그룹 안으로 (inside)
+        position = 'inside';
+      } else {
+        // 제목 아래 (탭 리스트 영역) → 그룹 안으로
+        position = 'inside';
+      }
+    } else {
+      // 탭→탭, 독립탭: before/after만
+      position = relativeY < height * 0.5 ? 'before' : 'after';
+    }
+
+    const indicator = { targetId: overId, position };
+    setDropIndicator(indicator);
+    dropIndicatorRef.current = indicator;
+  }, [allItems, findParentGroupId]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    const currentDropIntoGroupId = dropIntoGroupId;
+    const currentIndicator = dropIndicatorRef.current;
 
     setActiveId(null);
     setActiveType(null);
-    setDropIntoGroupId(null);
+    setDropIndicator(null);
+    dropIndicatorRef.current = null;
 
-    if (!over) return;
+    if (!over || !active || !currentIndicator) return;
 
     const activeIdStr = active.id as string;
-    const overIdStr = over.id as string;
-
+    // handleDragMove에서 리졸브된 targetId 사용 (탭→그룹 변환 반영)
+    const overIdStr = currentIndicator.targetId;
     if (activeIdStr === overIdStr) return;
 
-    // ── 갭에 드롭 → 독립 탭으로 삽입 ──
-    if (overIdStr.startsWith('gap-')) {
-      const gapIndex = parseInt(overIdStr.slice(4));
-      const realInsertIndex = gapIndex < items.length
-        ? allItems.indexOf(items[gapIndex])
-        : allItems.length;
-      if (realInsertIndex < 0) return;
+    const { position } = currentIndicator;
 
-      if (activeIdStr.startsWith('st-')) {
-        const tabId = activeIdStr.slice(3);
-        const fromItem = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
-        if (fromItem) {
-          const realFrom = allItems.indexOf(fromItem);
-          if (realFrom >= 0) reorderItems(realFrom, realInsertIndex > realFrom ? realInsertIndex - 1 : realInsertIndex);
-        }
-      } else if (!activeIdStr.startsWith('g-')) {
-        const tabId = activeIdStr;
-        let fromGroupId = '';
-        for (const item of allItems) {
-          if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
-            fromGroupId = item.group.id;
-            break;
-          }
-        }
-        if (fromGroupId) {
-          moveTabToStandalone(fromGroupId, tabId, realInsertIndex);
-        }
-      }
-      return;
-    }
-
-    // ── 그룹 헤더에 드롭 → 그룹 안으로 ──
-    if (currentDropIntoGroupId || overIdStr.startsWith('g-')) {
-      const targetGroupId = currentDropIntoGroupId ?? overIdStr.slice(2);
+    // ── 그룹 헤더에 inside 드롭 → 그룹 안으로 ──
+    if (overIdStr.startsWith('g-') && position === 'inside') {
+      const targetGroupId = overIdStr.slice(2);
 
       if (activeIdStr.startsWith('st-')) {
         const tabId = activeIdStr.slice(3);
@@ -223,10 +248,54 @@ export default function EditorArea() {
       return;
     }
 
-    // ── Top-level reorder ──
+    // ── 그룹 헤더의 before/after → 독립 위치로 이동 ──
+    if (overIdStr.startsWith('g-') && (position === 'before' || position === 'after')) {
+      const overTopIdx = topLevelIds.indexOf(overIdStr);
+      if (overTopIdx < 0) return;
+      const overItem = items[overTopIdx];
+      const realOverIdx = allItems.indexOf(overItem);
+
+      if (activeIdStr.startsWith('g-') || activeIdStr.startsWith('st-')) {
+        // 그룹/독립탭 간 순서 변경
+        const fromTopIdx = topLevelIds.indexOf(activeIdStr);
+        if (fromTopIdx < 0) return;
+        const activeItem = items[fromTopIdx];
+        const realFrom = allItems.indexOf(activeItem);
+        let realTo = position === 'before' ? realOverIdx : realOverIdx + 1;
+        if (realFrom < realTo) realTo--;
+        if (realFrom >= 0 && realTo >= 0) reorderItems(realFrom, realTo);
+      } else if (activeIdStr.startsWith('st-')) {
+        // 독립탭 이동
+        const tabId = activeIdStr.slice(3);
+        const fromItem = allItems.find((i) => i.kind === 'tab' && i.tab.id === tabId);
+        if (fromItem) {
+          const realFrom = allItems.indexOf(fromItem);
+          let realTo = position === 'before' ? realOverIdx : realOverIdx + 1;
+          if (realFrom < realTo) realTo--;
+          if (realFrom >= 0) reorderItems(realFrom, realTo);
+        }
+      } else {
+        // 그룹 내 탭 → 독립으로 꺼내기
+        const tabId = activeIdStr;
+        let fromGroupId = '';
+        for (const item of allItems) {
+          if (item.kind === 'group' && item.group.tabs.some((t) => t.id === tabId)) {
+            fromGroupId = item.group.id;
+            break;
+          }
+        }
+        if (fromGroupId) {
+          const realTo = position === 'before' ? realOverIdx : realOverIdx + 1;
+          moveTabToStandalone(fromGroupId, tabId, realTo);
+        }
+      }
+      return;
+    }
+
+    // ── Top-level reorder (독립탭 ↔ 독립탭, 그룹 ↔ 독립탭) ──
     if (
       (activeIdStr.startsWith('g-') || activeIdStr.startsWith('st-')) &&
-      (overIdStr.startsWith('g-') || overIdStr.startsWith('st-'))
+      overIdStr.startsWith('st-')
     ) {
       const fromIndex = topLevelIds.indexOf(activeIdStr);
       const toIndex = topLevelIds.indexOf(overIdStr);
@@ -234,10 +303,10 @@ export default function EditorArea() {
         const activeItem = items[fromIndex];
         const overItem = items[toIndex];
         const realFrom = allItems.indexOf(activeItem);
-        const realTo = allItems.indexOf(overItem);
-        if (realFrom >= 0 && realTo >= 0) {
-          reorderItems(realFrom, realTo);
-        }
+        let realTo = allItems.indexOf(overItem);
+        if (position === 'after') realTo++;
+        if (realFrom < realTo) realTo--;
+        if (realFrom >= 0 && realTo >= 0) reorderItems(realFrom, realTo);
       }
       return;
     }
@@ -258,7 +327,8 @@ export default function EditorArea() {
       if (!fromGroupId) return;
       const overTopIdx = topLevelIds.indexOf(overIdStr);
       if (overTopIdx >= 0) {
-        const realTo = allItems.indexOf(items[overTopIdx]);
+        let realTo = allItems.indexOf(items[overTopIdx]);
+        if (position === 'after') realTo++;
         if (realTo >= 0) moveTabToStandalone(fromGroupId, tabId, realTo);
       }
       return;
@@ -274,7 +344,8 @@ export default function EditorArea() {
         if (item.kind === 'group') {
           const overTabIdx = item.group.tabs.findIndex((t) => t.id === overIdStr);
           if (overTabIdx >= 0) {
-            moveTabToGroup(tabId, item.group.id, overTabIdx);
+            const targetIdx = position === 'before' ? overTabIdx : overTabIdx + 1;
+            moveTabToGroup(tabId, item.group.id, targetIdx);
             return;
           }
         }
@@ -306,9 +377,9 @@ export default function EditorArea() {
       if (fromGroupId && toGroupId) {
         const toGroup = allItems.find((i) => i.kind === 'group' && i.group.id === toGroupId);
         if (toGroup && toGroup.kind === 'group') {
-          let newIndex = toGroup.group.tabs.length;
           const overTabIdx = toGroup.group.tabs.findIndex((t) => t.id === overIdStr);
-          if (overTabIdx >= 0) newIndex = overTabIdx;
+          let newIndex = position === 'before' ? overTabIdx : overTabIdx + 1;
+          if (newIndex < 0) newIndex = toGroup.group.tabs.length;
           moveTab(fromGroupId, toGroupId, tabId, newIndex);
         }
       }
@@ -368,32 +439,37 @@ export default function EditorArea() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={preferInnerTarget}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
+        measuring={{
+          droppable: {
+            strategy: MeasuringStrategy.Always,
+          },
+        }}
       >
         <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
-          {/* space-y-3 제거 — ItemGap이 동일한 간격을 담당 */}
-          <div>
-            {items.map((item, index) => (
-              <Fragment key={item.kind === 'group' ? item.group.id : item.tab.id}>
-                <ItemGap id={`gap-${index}`} isDraggingTab={isDraggingTab} />
-                {item.kind === 'group' ? (
-                  <DraggableGroup
-                    group={item.group}
-                    isDropTarget={dropIntoGroupId === item.group.id}
-                  />
-                ) : (
-                  <DraggableStandaloneTab tab={item.tab} />
-                )}
-              </Fragment>
+          <div className="space-y-3">
+            {items.map((item) => (
+              item.kind === 'group' ? (
+                <DraggableGroup
+                  key={item.group.id}
+                  group={item.group}
+                  dropIndicator={dropIndicator}
+                />
+              ) : (
+                <DraggableStandaloneTab
+                  key={item.tab.id}
+                  tab={item.tab}
+                  dropIndicator={dropIndicator}
+                />
+              )
             ))}
-            <ItemGap id={`gap-${items.length}`} isDraggingTab={isDraggingTab} />
           </div>
         </SortableContext>
 
-        <DragOverlay>
+        <DragOverlay dropAnimation={null}>
           {activeId && activeType === 'group' && (
             <div className="opacity-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-3 text-sm">
               {allItems.find((i) => i.kind === 'group' && i.group.id === activeId.slice(2))?.kind === 'group'

@@ -1,30 +1,17 @@
-import { useState, useMemo, useCallback, useRef, Fragment } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
   closestCenter,
-  pointerWithin,
   PointerSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
-  useDroppable,
+  MeasuringStrategy,
   type DragStartEvent,
   type DragEndEvent,
-  type DragOverEvent,
-  type CollisionDetection,
+  type DragMoveEvent,
 } from '@dnd-kit/core';
-
-// 탭/갭을 그룹 헤더보다 우선 감지
-const preferInnerTarget: CollisionDetection = (args) => {
-  const pw = pointerWithin(args);
-  if (pw.length > 0) {
-    const nonGroup = pw.filter((c) => !String(c.id).startsWith('g-'));
-    if (nonGroup.length > 0) return nonGroup;
-    return pw;
-  }
-  return closestCenter(args);
-};
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -42,21 +29,13 @@ import {
 } from '../../shared/utils/tabDragLogic';
 import type { ChromeTabGroupColor } from '../../shared/types';
 
-// ── 아이템 사이 갭 (기존 간격 대체, 항상 고정 높이) ──
+// ── 드롭 인디케이터 타입 ──
 
-function ItemGap({ id, isDraggingTab }: { id: string; isDraggingTab: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDraggingTab });
+type DropPosition = 'before' | 'after' | 'inside';
 
-  return (
-    <div
-      ref={setNodeRef}
-      className={`h-1 rounded-sm transition-colors duration-150 ${
-        isDraggingTab && isOver
-          ? 'bg-blue-400 dark:bg-blue-500'
-          : ''
-      }`}
-    />
-  );
+interface DropIndicatorState {
+  targetId: string;
+  position: DropPosition;
 }
 
 // ── 메인 컴포넌트 ──
@@ -68,12 +47,8 @@ export default function CurrentTabsView() {
 
   // DnD 상태
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dropIntoGroupId, _setDropIntoGroupId] = useState<number | null>(null);
-  const dropIntoRef = useRef<number | null>(null);
-  const setDropIntoGroupId = useCallback((id: number | null) => {
-    dropIntoRef.current = id;
-    _setDropIntoGroupId(id);
-  }, []);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicatorState | null>(null);
+  const dropIndicatorRef = useRef<DropIndicatorState | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -173,76 +148,141 @@ export default function CurrentTabsView() {
     setActiveId(event.active.id as string);
   }, []);
 
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
-      const activeIdStr = event.active.id as string;
-      if (!activeIdStr.startsWith('t-')) {
-        setDropIntoGroupId(null);
+  const handleDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      const { active, over } = event;
+      if (!over || !active) {
+        setDropIndicator(null);
+        dropIndicatorRef.current = null;
         return;
       }
-      const overId = event.over?.id as string | undefined;
-      // 갭 위 → drop-into 해제
-      if (overId?.startsWith('gap-')) {
-        setDropIntoGroupId(null);
+
+      const activeIdStr = active.id as string;
+      const overId = over.id as string;
+      if (activeIdStr === overId) {
+        setDropIndicator(null);
+        dropIndicatorRef.current = null;
         return;
       }
-      if (overId?.startsWith('g-')) {
-        const groupId = parseInt(overId.slice(2));
-        const activeTabId = parseInt(activeIdStr.slice(2));
-        const tabInfo = tabLookup.get(activeTabId);
-        if (tabInfo && tabInfo.groupId !== groupId) {
-          setDropIntoGroupId(groupId);
-          return;
+
+      const overRect = over.rect;
+      if (!overRect) {
+        setDropIndicator(null);
+        dropIndicatorRef.current = null;
+        return;
+      }
+
+      const pointerY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
+      const relativeY = pointerY - overRect.top;
+      const height = overRect.height;
+
+      // 그룹 내부 탭 위에 호버 → 경계(첫/끝 탭)이면 부모 그룹으로 리졸브
+      if (overId.startsWith('t-')) {
+        const overTabId = parseInt(overId.slice(2));
+        const overTab = tabLookup.get(overTabId);
+        if (overTab && overTab.groupId !== -1) {
+          const segment = segments.find(
+            (s) => s.kind === 'group' && s.groupId === overTab.groupId,
+          );
+          if (segment && segment.kind === 'group') {
+            const tabIndex = segment.tabs.findIndex((t) => t.id === overTabId);
+            const isFirstTab = tabIndex === 0;
+            const isLastTab = tabIndex === segment.tabs.length - 1;
+            const rawPosition = relativeY < height * 0.5 ? 'before' : 'after';
+
+            // 그룹 드래그: 항상 부모 그룹으로 리졸브
+            if (activeIdStr.startsWith('g-')) {
+              const isUpperHalf = tabIndex < segment.tabs.length / 2;
+              const indicator: DropIndicatorState = {
+                targetId: `g-${overTab.groupId}`,
+                position: isUpperHalf ? 'before' : 'after',
+              };
+              setDropIndicator(indicator);
+              dropIndicatorRef.current = indicator;
+              return;
+            }
+
+            // 탭 드래그: 첫 탭 before → 그룹 앞으로, 끝 탭 after → 그룹 뒤로
+            if (isFirstTab && rawPosition === 'before') {
+              const indicator: DropIndicatorState = {
+                targetId: `g-${overTab.groupId}`,
+                position: 'before',
+              };
+              setDropIndicator(indicator);
+              dropIndicatorRef.current = indicator;
+              return;
+            }
+            if (isLastTab && rawPosition === 'after') {
+              const indicator: DropIndicatorState = {
+                targetId: `g-${overTab.groupId}`,
+                position: 'after',
+              };
+              setDropIndicator(indicator);
+              dropIndicatorRef.current = indicator;
+              return;
+            }
+          }
         }
       }
-      setDropIntoGroupId(null);
+
+      let position: DropPosition;
+
+      if (overId.startsWith('g-')) {
+        // 그룹 헤더 기준 — 헤더 실제 높이(~36px)로 판단
+        const HEADER_H = 36;
+        if (!isDraggingTab) {
+          // 그룹→그룹: before/after만
+          position = relativeY < height * 0.5 ? 'before' : 'after';
+        } else if (relativeY < HEADER_H * 0.5) {
+          // 제목 상단 50% → 그룹과 같은 레이어 (before)
+          position = 'before';
+        } else if (relativeY < HEADER_H) {
+          // 제목 하단 50% → 그룹 안으로 (inside)
+          position = 'inside';
+        } else {
+          // 제목 아래 (탭 리스트 영역) → 그룹 안으로
+          position = 'inside';
+        }
+      } else {
+        // 탭→탭, 독립탭: before/after만
+        position = relativeY < height * 0.5 ? 'before' : 'after';
+      }
+
+      const indicator = { targetId: overId, position };
+      setDropIndicator(indicator);
+      dropIndicatorRef.current = indicator;
     },
-    [tabLookup, setDropIntoGroupId],
+    [isDraggingTab],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      const currentDropIntoGroupId = dropIntoRef.current;
+      const currentIndicator = dropIndicatorRef.current;
 
       setActiveId(null);
-      setDropIntoGroupId(null);
+      setDropIndicator(null);
+      dropIndicatorRef.current = null;
 
-      if (!over || active.id === over.id) return;
+      if (!over || !active || !currentIndicator) return;
 
       const activeIdStr = active.id as string;
-      const overIdStr = over.id as string;
+      // handleDragMove에서 리졸브된 targetId 사용 (탭→그룹 변환 반영)
+      const overIdStr = currentIndicator.targetId;
+      if (activeIdStr === overIdStr) return;
+
       const isActiveGroup = activeIdStr.startsWith('g-');
-
-      // ── 갭에 드롭 → 미분류로 이동 ──
-      if (overIdStr.startsWith('gap-') && !isActiveGroup) {
-        const gapIndex = parseInt(overIdStr.slice(4));
-        const activeTabId = parseInt(activeIdStr.slice(2));
-
-        let targetIndex: number;
-        if (gapIndex < nonPinnedSegments.length) {
-          const seg = nonPinnedSegments[gapIndex];
-          targetIndex = seg.kind === 'group' ? seg.tabs[0].index : seg.tab.index;
-        } else {
-          const lastSeg = nonPinnedSegments[nonPinnedSegments.length - 1];
-          if (!lastSeg) return;
-          targetIndex = lastSeg.kind === 'group'
-            ? lastSeg.tabs[lastSeg.tabs.length - 1].index + 1
-            : lastSeg.tab.index + 1;
-        }
-
-        handleMoveTab(activeTabId, targetIndex, -1);
-        return;
-      }
+      const { position } = currentIndicator;
 
       if (!isActiveGroup) {
+        // ── 탭 이동 ──
         const activeTabId = parseInt(activeIdStr.slice(2));
         const activeTab = tabLookup.get(activeTabId);
         if (!activeTab) return;
 
-        // 그룹 헤더에 드롭 → 그룹 안으로
-        if (currentDropIntoGroupId != null || overIdStr.startsWith('g-')) {
-          const targetGroupId = currentDropIntoGroupId ?? parseInt(overIdStr.slice(2));
+        // 그룹 헤더에 inside 드롭 → 그룹 안으로
+        if (overIdStr.startsWith('g-') && position === 'inside') {
+          const targetGroupId = parseInt(overIdStr.slice(2));
           const segment = segments.find(
             (s) => s.kind === 'group' && s.groupId === targetGroupId,
           );
@@ -253,17 +293,32 @@ export default function CurrentTabsView() {
           return;
         }
 
-        // 탭 → 탭 이동
-        const overTabId = parseInt(overIdStr.slice(2));
-        const overTab = tabLookup.get(overTabId);
-        if (!overTab) return;
+        // 그룹 헤더의 before/after → 그룹 사이로 미분류 이동
+        if (overIdStr.startsWith('g-') && (position === 'before' || position === 'after')) {
+          const targetGroupId = parseInt(overIdStr.slice(2));
+          const segment = segments.find(
+            (s) => s.kind === 'group' && s.groupId === targetGroupId,
+          );
+          if (segment && segment.kind === 'group') {
+            const targetIndex = position === 'before'
+              ? segment.tabs[0].index
+              : segment.tabs[segment.tabs.length - 1].index + 1;
+            handleMoveTab(activeTabId, targetIndex, -1);
+          }
+          return;
+        }
 
-        const targetGroupId = overTab.groupId;
-        const pos: 'before' | 'after' = activeTab.index < overTab.index ? 'after' : 'before';
-        const targetIndex = pos === 'after' ? overTab.index + 1 : overTab.index;
-        handleMoveTab(activeTabId, targetIndex, targetGroupId);
+        // 탭 → 탭 이동
+        if (overIdStr.startsWith('t-')) {
+          const overTabId = parseInt(overIdStr.slice(2));
+          const overTab = tabLookup.get(overTabId);
+          if (!overTab) return;
+          const targetGroupId = overTab.groupId;
+          const targetIndex = position === 'before' ? overTab.index : overTab.index + 1;
+          handleMoveTab(activeTabId, targetIndex, targetGroupId);
+        }
       } else {
-        // 그룹 이동
+        // ── 그룹 이동 ──
         const activeGroupId = parseInt(activeIdStr.slice(2));
 
         if (overIdStr.startsWith('g-')) {
@@ -272,25 +327,20 @@ export default function CurrentTabsView() {
             (s) => s.kind === 'group' && s.groupId === overGroupId,
           );
           if (!overSegment || overSegment.kind !== 'group') return;
-          const activeIdx = topLevelIds.indexOf(activeIdStr);
-          const overIdx = topLevelIds.indexOf(overIdStr);
-          const targetIdx =
-            activeIdx < overIdx
-              ? overSegment.tabs[overSegment.tabs.length - 1].index + 1
-              : overSegment.tabs[0].index;
+          const targetIdx = position === 'before'
+            ? overSegment.tabs[0].index
+            : overSegment.tabs[overSegment.tabs.length - 1].index + 1;
           handleMoveGroup(activeGroupId, targetIdx);
-        } else {
+        } else if (overIdStr.startsWith('t-')) {
           const overTabId = parseInt(overIdStr.slice(2));
           const overTab = tabLookup.get(overTabId);
           if (!overTab) return;
-          const activeIdx = topLevelIds.indexOf(activeIdStr);
-          const overIdx = topLevelIds.indexOf(overIdStr);
-          const targetIdx = activeIdx < overIdx ? overTab.index + 1 : overTab.index;
+          const targetIdx = position === 'before' ? overTab.index : overTab.index + 1;
           handleMoveGroup(activeGroupId, targetIdx);
         }
       }
     },
-    [segments, nonPinnedSegments, tabLookup, topLevelIds, handleMoveTab, handleMoveGroup, setDropIntoGroupId],
+    [segments, tabLookup, handleMoveTab, handleMoveGroup],
   );
 
   // ── DragOverlay 데이터 ──
@@ -319,10 +369,15 @@ export default function CurrentTabsView() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={preferInnerTarget}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
+        measuring={{
+          droppable: {
+            strategy: MeasuringStrategy.Always,
+          },
+        }}
       >
         <SortableContext items={topLevelIds} strategy={verticalListSortingStrategy}>
           {/* 고정 탭 섹션 */}
@@ -348,8 +403,8 @@ export default function CurrentTabsView() {
             return null;
           })}
 
-          {/* 그룹/탭 + 갭 */}
-          {nonPinnedSegments.map((segment, npIndex) => {
+          {/* 그룹/탭 */}
+          {nonPinnedSegments.map((segment) => {
             if (segment.kind === 'group') {
               const group = groupMap.get(segment.groupId);
               if (!group) return null;
@@ -357,53 +412,51 @@ export default function CurrentTabsView() {
                 .map((st) => tabs.find((t) => t.id === st.id)!)
                 .filter(Boolean);
               const tabIds = segment.tabs.map((st) => `t-${st.id}`);
+              const sortableId = `g-${group.id}`;
 
               return (
-                <Fragment key={`group-${group.id}`}>
-                  <ItemGap id={`gap-${npIndex}`} isDraggingTab={isDraggingTab} />
-                  <SortableGroupSection
-                    groupId={group.id}
-                    title={group.title || '그룹'}
-                    color={(group.color as ChromeTabGroupColor) ?? 'grey'}
-                    tabCount={groupTabs.length}
-                    collapsed={group.collapsed}
-                    isDropTarget={dropIntoGroupId === group.id}
-                    onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
-                  >
-                    <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
-                      {groupTabs.map((tab) => (
-                        <SortableTabItem
-                          key={tab.id}
-                          tab={tab}
-                          profileTitleMap={profileTitleMap}
-                          onClick={() => tab.id && handleTabClick(tab.id)}
-                          onClose={() => tab.id && handleTabClose(tab.id)}
-                        />
-                      ))}
-                    </SortableContext>
-                  </SortableGroupSection>
-                </Fragment>
+                <SortableGroupSection
+                  key={sortableId}
+                  groupId={group.id}
+                  title={group.title || '그룹'}
+                  color={(group.color as ChromeTabGroupColor) ?? 'grey'}
+                  tabCount={groupTabs.length}
+                  collapsed={group.collapsed}
+                  dropIndicator={dropIndicator}
+                  onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
+                >
+                  <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
+                    {groupTabs.map((tab) => (
+                      <SortableTabItem
+                        key={tab.id}
+                        tab={tab}
+                        profileTitleMap={profileTitleMap}
+                        dropIndicator={dropIndicator}
+                        onClick={() => tab.id && handleTabClick(tab.id)}
+                        onClose={() => tab.id && handleTabClose(tab.id)}
+                      />
+                    ))}
+                  </SortableContext>
+                </SortableGroupSection>
               );
             }
 
             const chromeTab = tabs.find((t) => t.id === segment.tab.id);
             if (!chromeTab) return null;
             return (
-              <Fragment key={`standalone-${chromeTab.id}`}>
-                <ItemGap id={`gap-${npIndex}`} isDraggingTab={isDraggingTab} />
-                <SortableStandaloneTab
-                  tab={chromeTab}
-                  profileTitleMap={profileTitleMap}
-                  onClick={() => chromeTab.id && handleTabClick(chromeTab.id)}
-                  onClose={() => chromeTab.id && handleTabClose(chromeTab.id)}
-                />
-              </Fragment>
+              <SortableStandaloneTab
+                key={`standalone-${chromeTab.id}`}
+                tab={chromeTab}
+                profileTitleMap={profileTitleMap}
+                dropIndicator={dropIndicator}
+                onClick={() => chromeTab.id && handleTabClick(chromeTab.id)}
+                onClose={() => chromeTab.id && handleTabClose(chromeTab.id)}
+              />
             );
           })}
-          <ItemGap id={`gap-${nonPinnedSegments.length}`} isDraggingTab={isDraggingTab} />
         </SortableContext>
 
-        <DragOverlay>
+        <DragOverlay dropAnimation={null}>
           {activeDragData?.type === 'group' && (
             <div className="opacity-80 bg-white dark:bg-gray-800 rounded-md shadow-lg border px-3 py-1.5 text-sm font-medium flex items-center gap-2">
               <span
@@ -427,6 +480,19 @@ export default function CurrentTabsView() {
         </DragOverlay>
       </DndContext>
     </div>
+  );
+}
+
+// ── 드롭 인디케이터 라인 컴포넌트 ──
+
+function DropLine({ position, indent = 0 }: { position: 'before' | 'after'; indent?: number }) {
+  return (
+    <div
+      className={`absolute left-0 right-0 h-0.5 bg-blue-500 z-10 ${
+        position === 'before' ? 'top-0' : 'bottom-0'
+      }`}
+      style={{ marginLeft: `${indent}px` }}
+    />
   );
 }
 
@@ -466,7 +532,7 @@ function SortableGroupSection({
   color,
   tabCount,
   collapsed,
-  isDropTarget,
+  dropIndicator,
   onToggle,
   children,
 }: {
@@ -475,12 +541,13 @@ function SortableGroupSection({
   color: ChromeTabGroupColor;
   tabCount: number;
   collapsed?: boolean;
-  isDropTarget: boolean;
+  dropIndicator: DropIndicatorState | null;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const sortableId = `g-${groupId}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `g-${groupId}`,
+    id: sortableId,
   });
 
   const style = {
@@ -493,10 +560,18 @@ function SortableGroupSection({
   const bgColor = COLOR_MAP_LIGHT[color] ?? COLOR_MAP_LIGHT.grey;
   const dotColor = COLOR_MAP[color] ?? COLOR_MAP.grey;
 
+  const showBefore = dropIndicator?.targetId === sortableId && dropIndicator.position === 'before';
+  const showAfter = dropIndicator?.targetId === sortableId && dropIndicator.position === 'after';
+  const showInside = dropIndicator?.targetId === sortableId && dropIndicator.position === 'inside';
+
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="relative">
+      {showBefore && <DropLine position="before" />}
+
       <div
-        className={`rounded-md overflow-hidden transition-shadow ${isDropTarget ? 'ring-2 ring-blue-500 ring-inset' : ''}`}
+        className={`rounded-md overflow-hidden transition-shadow ${
+          showInside ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/30 dark:bg-blue-900/20' : ''
+        }`}
         style={{ backgroundColor: bgColor + '40' }}
       >
         <button
@@ -515,6 +590,8 @@ function SortableGroupSection({
         </button>
         {open && <div className="pb-1">{children}</div>}
       </div>
+
+      {showAfter && <DropLine position="after" />}
     </div>
   );
 }
@@ -524,16 +601,19 @@ function SortableGroupSection({
 function SortableTabItem({
   tab,
   profileTitleMap,
+  dropIndicator,
   onClick,
   onClose,
 }: {
   tab: chrome.tabs.Tab;
   profileTitleMap: Map<string, { title: string; profileName: string }>;
+  dropIndicator: DropIndicatorState | null;
   onClick: () => void;
   onClose: () => void;
 }) {
+  const sortableId = `t-${tab.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `t-${tab.id}`,
+    id: sortableId,
   });
 
   const style = {
@@ -545,8 +625,13 @@ function SortableTabItem({
   const profileMatch = tab.url ? profileTitleMap.get(normalizeUrl(tab.url)) : undefined;
   const displayTitle = profileMatch?.title ?? tab.title ?? tab.url;
 
+  const showBefore = dropIndicator?.targetId === sortableId && dropIndicator.position === 'before';
+  const showAfter = dropIndicator?.targetId === sortableId && dropIndicator.position === 'after';
+
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="relative">
+      {showBefore && <DropLine position="before" indent={12} />}
+
       <div
         {...attributes}
         {...listeners}
@@ -583,6 +668,8 @@ function SortableTabItem({
           ×
         </button>
       </div>
+
+      {showAfter && <DropLine position="after" indent={12} />}
     </div>
   );
 }
@@ -592,16 +679,19 @@ function SortableTabItem({
 function SortableStandaloneTab({
   tab,
   profileTitleMap,
+  dropIndicator,
   onClick,
   onClose,
 }: {
   tab: chrome.tabs.Tab;
   profileTitleMap: Map<string, { title: string; profileName: string }>;
+  dropIndicator: DropIndicatorState | null;
   onClick: () => void;
   onClose: () => void;
 }) {
+  const sortableId = `t-${tab.id}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `t-${tab.id}`,
+    id: sortableId,
   });
 
   const style = {
@@ -613,8 +703,13 @@ function SortableStandaloneTab({
   const profileMatch = tab.url ? profileTitleMap.get(normalizeUrl(tab.url)) : undefined;
   const displayTitle = profileMatch?.title ?? tab.title ?? tab.url;
 
+  const showBefore = dropIndicator?.targetId === sortableId && dropIndicator.position === 'before';
+  const showAfter = dropIndicator?.targetId === sortableId && dropIndicator.position === 'after';
+
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="relative">
+      {showBefore && <DropLine position="before" />}
+
       <div
         {...attributes}
         {...listeners}
@@ -651,6 +746,8 @@ function SortableStandaloneTab({
           ×
         </button>
       </div>
+
+      {showAfter && <DropLine position="after" />}
     </div>
   );
 }
