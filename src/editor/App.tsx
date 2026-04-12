@@ -127,7 +127,7 @@ export default function App() {
   }, [hasChanges]);
 
   useEffect(() => {
-    const base = 'Tab Manager Pro — Editor';
+    const base = 'Gara — Tab Manager Editor';
     document.title = hasChanges ? `* ${base}` : base;
   }, [hasChanges]);
 

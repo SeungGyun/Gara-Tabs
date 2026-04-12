@@ -78,7 +78,7 @@ export default function Toolbar({ onSave, hasChanges }: Props) {
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-b bg-white dark:bg-gray-800 shadow-sm">
       <h1 className="text-sm font-bold mr-auto">
-        Tab Manager Pro — Editor
+        Gara — Tab Manager Editor
       </h1>
 
       <button onClick={handleExportAll} disabled={profiles.length === 0} className="btn-secondary text-xs disabled:opacity-50" title={t('exportAll')}>
