@@ -16,7 +16,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case 'GROUP_BY_DOMAIN':
-      groupTabsByDomain(message.settings).then(sendResponse);
+      groupTabsByDomain(message.settings, true).then(sendResponse);
       return true;
 
     case 'LOAD_PROFILE':
@@ -132,22 +132,49 @@ async function collectAllTabs(): Promise<{ success: boolean; moved: number; inco
 // ===== 도메인별 그룹화 =====
 async function groupTabsByDomain(
   settings?: Settings,
+  regroup = false,
 ): Promise<{ success: boolean; groupCount: number }> {
   try {
     if (!settings) settings = await getSettings();
     const currentWindow = await chrome.windows.getCurrent();
     const tabs = await chrome.tabs.query({ windowId: currentWindow.id });
 
+    // regroup 모드: 기존 그룹 해체 후 재그룹화
+    if (regroup) {
+      const existingGroupIds = new Set<number>();
+      for (const tab of tabs) {
+        if (tab.groupId !== undefined && tab.groupId !== -1) {
+          existingGroupIds.add(tab.groupId);
+        }
+      }
+      for (const groupId of existingGroupIds) {
+        try {
+          const groupTabs = tabs.filter((t) => t.groupId === groupId);
+          const tabIds = groupTabs.map((t) => t.id!).filter(Boolean);
+          if (tabIds.length > 0) {
+            await chrome.tabs.ungroup(tabIds);
+          }
+        } catch {
+          // 이미 해체된 그룹 무시
+        }
+      }
+    }
+
     // 도메인별 분류
     const domainMap = new Map<string, chrome.tabs.Tab[]>();
 
-    for (const tab of tabs) {
+    // regroup 후 탭 상태가 변경되었으므로 다시 조회
+    const freshTabs = regroup
+      ? await chrome.tabs.query({ windowId: currentWindow.id })
+      : tabs;
+
+    for (const tab of freshTabs) {
       if (!tab.url || !tab.id) continue;
       if (tab.pinned) continue;
       if (isExcludedUrl(tab.url, settings.excludePatterns)) continue;
 
-      // 이미 그룹에 속해 있으면 스킵
-      if (tab.groupId !== undefined && tab.groupId !== -1) continue;
+      // regroup이 아닌 경우에만 기존 그룹 스킵
+      if (!regroup && tab.groupId !== undefined && tab.groupId !== -1) continue;
 
       const domain = extractDomain(tab.url, settings.subdomainMode, settings.customDomainRules);
       if (!domain) continue;

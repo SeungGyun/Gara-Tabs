@@ -122,7 +122,7 @@ const en: TranslationKeys = {
   groupName: 'Group name',
   colorLabel: 'Color:',
   customDomainRules: 'Custom Domain Rules',
-  hostname: 'hostname',
+  hostname: 'URL or hostname',
   excludePatterns: 'Exclude Patterns',
 
   // ── Editor ──

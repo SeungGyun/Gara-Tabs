@@ -13,6 +13,29 @@ interface SettingsState {
   removeCustomRule: (hostname: string) => Promise<void>;
 }
 
+/**
+ * 사용자 입력에서 규칙 키를 추출.
+ * URL 형태면 hostname + path 첫 세그먼트를 반환.
+ * 예: "https://nckorea.atlassian.net/jira/board" → "nckorea.atlassian.net/jira"
+ *     "nckorea.atlassian.net/wiki" → "nckorea.atlassian.net/wiki"
+ *     "google.com" → "google.com"
+ */
+function parseRuleKey(input: string): string {
+  try {
+    // URL 형태가 아니면 그대로 반환
+    const url = input.includes('://') ? new URL(input) : new URL('https://' + input);
+    const hostname = url.hostname;
+    // path의 첫 세그먼트만 추출 (/jira/board → /jira)
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    if (pathSegments.length > 0) {
+      return `${hostname}/${pathSegments[0]}`;
+    }
+    return hostname;
+  } catch {
+    return input;
+  }
+}
+
 async function readSettings(): Promise<Settings> {
   const data = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS);
   return { ...DEFAULT_SETTINGS, ...data[STORAGE_KEYS.SETTINGS] };
@@ -44,10 +67,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings });
   },
 
-  addCustomRule: async (hostname, groupName) => {
+  addCustomRule: async (input, groupName) => {
+    // URL이 입력되면 hostname + path 첫 세그먼트를 키로 추출
+    const key = parseRuleKey(input);
     const settings = {
       ...get().settings,
-      customDomainRules: { ...get().settings.customDomainRules, [hostname]: groupName },
+      customDomainRules: { ...get().settings.customDomainRules, [key]: groupName },
     };
     await writeSettings(settings);
     set({ settings });

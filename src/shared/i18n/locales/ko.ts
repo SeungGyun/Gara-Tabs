@@ -120,7 +120,7 @@ const ko = {
   groupName: '그룹명',
   colorLabel: '색상:',
   customDomainRules: '커스텀 도메인 규칙',
-  hostname: 'hostname',
+  hostname: 'URL 또는 hostname',
   excludePatterns: '제외 패턴',
 
   // ── 에디터 ──
