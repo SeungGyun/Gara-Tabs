@@ -141,6 +141,7 @@ const ja: TranslationKeys = {
   groupNamePlaceholder: 'グループ名...',
   titleOptional: 'タイトル (任意)',
   addGroup: '+ グループ追加',
+  newGroup: '新しいグループ',
   addTab: '+ タブ追加',
 
   // ── エディタコンポーネント ──

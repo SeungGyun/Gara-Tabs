@@ -141,6 +141,7 @@ const de: TranslationKeys = {
   groupNamePlaceholder: 'Gruppenname...',
   titleOptional: 'Titel (optional)',
   addGroup: '+ Gruppe hinzufügen',
+  newGroup: 'Neue Gruppe',
   addTab: '+ Tab hinzufügen',
 
   // ── Editor-Komponenten ──

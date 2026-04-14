@@ -141,6 +141,7 @@ const zh_CN: TranslationKeys = {
   groupNamePlaceholder: '分组名称...',
   titleOptional: '标题 (可选)',
   addGroup: '+ 添加分组',
+  newGroup: '新分组',
   addTab: '+ 添加标签页',
 
   // ── 编辑器组件 ──

@@ -59,6 +59,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'TOGGLE_GROUP_COLLAPSED':
       toggleGroupCollapsed(message.groupId, message.collapsed).then(sendResponse);
       return true;
+
+    case 'CREATE_GROUP':
+      createNewGroup(message.title).then(sendResponse);
+      return true;
+
+    case 'RENAME_GROUP':
+      renameGroup(message.groupId, message.title).then(sendResponse);
+      return true;
   }
 });
 
@@ -560,6 +568,26 @@ async function moveGroup(groupId: number, targetIndex: number): Promise<{ succes
 async function toggleGroupCollapsed(groupId: number, collapsed: boolean): Promise<{ success: boolean }> {
   try {
     await chrome.tabGroups.update(groupId, { collapsed });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+async function createNewGroup(title: string): Promise<{ success: boolean; groupId?: number }> {
+  try {
+    const tab = await chrome.tabs.create({ active: false });
+    const groupId = await chrome.tabs.group({ tabIds: [tab.id!] });
+    await chrome.tabGroups.update(groupId, { title });
+    return { success: true, groupId };
+  } catch {
+    return { success: false };
+  }
+}
+
+async function renameGroup(groupId: number, title: string): Promise<{ success: boolean }> {
+  try {
+    await chrome.tabGroups.update(groupId, { title });
     return { success: true };
   } catch {
     return { success: false };

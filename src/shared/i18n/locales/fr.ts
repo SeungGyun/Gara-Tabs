@@ -141,6 +141,7 @@ const fr: TranslationKeys = {
   groupNamePlaceholder: 'Nom du groupe...',
   titleOptional: 'Titre (facultatif)',
   addGroup: '+ Ajouter un groupe',
+  newGroup: 'Nouveau groupe',
   addTab: '+ Ajouter un onglet',
 
   // ── Composants de l'éditeur ──

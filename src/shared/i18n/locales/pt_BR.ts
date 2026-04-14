@@ -141,6 +141,7 @@ const pt_BR: TranslationKeys = {
   groupNamePlaceholder: 'Nome do grupo...',
   titleOptional: 'Título (opcional)',
   addGroup: '+ Adicionar grupo',
+  newGroup: 'Novo grupo',
   addTab: '+ Adicionar aba',
 
   // ── Componentes do editor ──

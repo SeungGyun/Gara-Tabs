@@ -141,6 +141,7 @@ const en: TranslationKeys = {
   groupNamePlaceholder: 'Group name...',
   titleOptional: 'Title (optional)',
   addGroup: '+ Add Group',
+  newGroup: 'New Group',
   addTab: '+ Add Tab',
 
   // ── Editor Components ──

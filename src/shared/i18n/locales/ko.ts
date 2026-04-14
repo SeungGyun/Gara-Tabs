@@ -139,6 +139,7 @@ const ko = {
   groupNamePlaceholder: '그룹 이름...',
   titleOptional: '제목 (선택)',
   addGroup: '+ 그룹 추가',
+  newGroup: '새 그룹',
   addTab: '+ 탭 추가',
 
   // ── 에디터 컴포넌트 ──

@@ -141,6 +141,7 @@ const es: TranslationKeys = {
   groupNamePlaceholder: 'Nombre del grupo...',
   titleOptional: 'Título (opcional)',
   addGroup: '+ Agregar grupo',
+  newGroup: 'Nuevo grupo',
   addTab: '+ Agregar pestaña',
 
   // ── Componentes del editor ──

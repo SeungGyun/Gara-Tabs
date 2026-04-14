@@ -167,4 +167,6 @@ export type MessageType =
   | { type: 'SAVE_PROFILE'; name: string }
   | { type: 'CLOSE_COLLAPSED_GROUPS' }
   | { type: 'MOVE_TAB'; tabId: number; targetIndex: number; targetGroupId?: number }
-  | { type: 'MOVE_GROUP'; groupId: number; targetIndex: number };
+  | { type: 'MOVE_GROUP'; groupId: number; targetIndex: number }
+  | { type: 'CREATE_GROUP'; title: string }
+  | { type: 'RENAME_GROUP'; groupId: number; title: string };

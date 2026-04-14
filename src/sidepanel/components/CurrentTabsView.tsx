@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -134,6 +134,15 @@ export default function CurrentTabsView() {
   const handleToggleCollapsed = useCallback(async (groupId: number, collapsed: boolean) => {
     await chrome.runtime.sendMessage({ type: 'TOGGLE_GROUP_COLLAPSED', groupId, collapsed });
   }, []);
+
+  const handleRenameGroup = useCallback(async (groupId: number, title: string) => {
+    await chrome.runtime.sendMessage({ type: 'RENAME_GROUP', groupId, title });
+  }, []);
+
+  const handleCreateGroup = useCallback(async () => {
+    await chrome.runtime.sendMessage({ type: 'CREATE_GROUP', title: t('newGroup') });
+    refresh();
+  }, [refresh]);
 
   const handleTabClick = useCallback((tabId: number) => {
     chrome.tabs.update(tabId, { active: true });
@@ -425,6 +434,7 @@ export default function CurrentTabsView() {
                   collapsed={group.collapsed}
                   dropIndicator={dropIndicator}
                   onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
+                  onRename={(title) => handleRenameGroup(group.id, title)}
                 >
                   <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
                     {groupTabs.map((tab) => (
@@ -480,6 +490,14 @@ export default function CurrentTabsView() {
           )}
         </DragOverlay>
       </DndContext>
+
+      {/* 그룹 추가 버튼 */}
+      <button
+        onClick={handleCreateGroup}
+        className="w-full mt-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+      >
+        {t('addGroup')}
+      </button>
     </div>
   );
 }
@@ -512,7 +530,7 @@ function PinnedSection({ children }: { children: React.ReactNode }) {
           onClick={() => setOpen(!open)}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-left hover:opacity-80"
         >
-          <span className="text-xs">{open ? '▼' : '▶'}</span>
+          <ChevronIcon open={open} />
           <span
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: COLOR_MAP.grey }}
@@ -535,6 +553,7 @@ function SortableGroupSection({
   collapsed,
   dropIndicator,
   onToggle,
+  onRename,
   children,
 }: {
   groupId: number;
@@ -544,12 +563,21 @@ function SortableGroupSection({
   collapsed?: boolean;
   dropIndicator: DropIndicatorState | null;
   onToggle: () => void;
+  onRename: (title: string) => void;
   children: React.ReactNode;
 }) {
   const sortableId = `g-${groupId}`;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sortableId,
   });
+  const [editing, setEditing] = useState(false);
+
+  const handleRenameCommit = useCallback((newTitle: string) => {
+    setEditing(false);
+    if (newTitle.trim() && newTitle.trim() !== title) {
+      onRename(newTitle.trim());
+    }
+  }, [title, onRename]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -575,25 +603,85 @@ function SortableGroupSection({
         }`}
         style={{ backgroundColor: bgColor + '40' }}
       >
-        <button
+        <div
           {...attributes}
           {...listeners}
-          onClick={onToggle}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-left hover:opacity-80 cursor-grab active:cursor-grabbing"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-left cursor-grab active:cursor-grabbing"
         >
-          <span className="text-xs">{open ? '▼' : '▶'}</span>
+          {/* 접기/펼치기 영역: 화살표 + 색상 */}
           <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: dotColor }}
-          />
-          <span className="truncate flex-1">{title}</span>
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            className="flex items-center gap-2 flex-shrink-0 cursor-pointer hover:opacity-60 py-0.5 pr-1"
+          >
+            <ChevronIcon open={open} />
+            <span
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ backgroundColor: dotColor }}
+            />
+          </span>
+          {/* 제목 영역: 더블클릭으로 편집 */}
+          {editing ? (
+            <GroupTitleInput
+              value={title}
+              onCommit={handleRenameCommit}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <span
+              className="truncate flex-1 cursor-text hover:underline hover:decoration-dotted hover:decoration-gray-400"
+              title="더블클릭하여 수정"
+              onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
+            >
+              {title}
+            </span>
+          )}
           <span className="text-xs text-gray-500">{tabCount}</span>
-        </button>
+        </div>
         {open && <div className="pb-1">{children}</div>}
       </div>
 
       {showAfter && <DropLine position="after" />}
     </div>
+  );
+}
+
+// ── 그룹 제목 인라인 편집 입력 ──
+
+function GroupTitleInput({
+  value,
+  onCommit,
+  onCancel,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  onCancel: () => void;
+}) {
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={editValue}
+      onChange={(e) => setEditValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onCommit(editValue);
+        if (e.key === 'Escape') onCancel();
+        e.stopPropagation();
+      }}
+      onBlur={() => onCommit(editValue)}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className="flex-1 min-w-0 bg-white dark:bg-gray-700 border border-blue-400 rounded px-1 text-sm outline-none"
+    />
   );
 }
 
@@ -804,6 +892,20 @@ function StaticTabItem({
         ×
       </button>
     </div>
+  );
+}
+
+// ── Chevron 아이콘 ──
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`w-3 h-3 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${open ? 'rotate-90' : 'rotate-0'}`}
+      viewBox="0 0 16 16"
+      fill="currentColor"
+    >
+      <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z" />
+    </svg>
   );
 }
 
