@@ -150,6 +150,9 @@ const es: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: '¿Eliminar el grupo "{0}"?',
   deleteGroup: 'Eliminar grupo',
+  ungroupTabs: 'Desagrupar pestañas',
+  ungroupConfirm: '¿Desagrupar "{0}"?\n(Las pestañas se mantendrán, solo se eliminará el grupo)',
+  closeGroupWithTabs: 'Cerrar con pestañas',
 
   // ── Panel de propiedades ──
   selectToEdit: 'Selecciona un grupo o pestaña\npara editar sus propiedades.',

@@ -150,6 +150,9 @@ const ja: TranslationKeys = {
   countItems: '{0}個',
   deleteGroupConfirm: 'グループ「{0}」を削除しますか？',
   deleteGroup: 'グループを削除',
+  ungroupTabs: 'グループ解除',
+  ungroupConfirm: '"{0}" グループを解除しますか？\n（タブは保持され、グループのみ解除されます）',
+  closeGroupWithTabs: 'タブと一緒に閉じる',
 
   // ── プロパティパネル ──
   selectToEdit: 'グループまたはタブを選択すると\nここで編集できます。',

@@ -150,6 +150,9 @@ const pt_BR: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: 'Excluir o grupo "{0}"?',
   deleteGroup: 'Excluir grupo',
+  ungroupTabs: 'Desagrupar abas',
+  ungroupConfirm: 'Desagrupar "{0}"?\n(As abas serão mantidas, apenas o grupo será removido)',
+  closeGroupWithTabs: 'Fechar com as abas',
 
   // ── Painel de propriedades ──
   selectToEdit: 'Selecione um grupo ou aba\npara editar suas propriedades.',

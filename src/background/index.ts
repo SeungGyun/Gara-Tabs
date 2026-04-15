@@ -67,6 +67,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'RENAME_GROUP':
       renameGroup(message.groupId, message.title).then(sendResponse);
       return true;
+
+    case 'UNGROUP_TABS':
+      ungroupTabs(message.groupId).then(sendResponse);
+      return true;
+
+    case 'CLOSE_GROUP':
+      closeGroup(message.groupId).then(sendResponse);
+      return true;
   }
 });
 
@@ -615,6 +623,34 @@ async function createNewGroup(title: string): Promise<{ success: boolean; groupI
 async function renameGroup(groupId: number, title: string): Promise<{ success: boolean }> {
   try {
     await chrome.tabGroups.update(groupId, { title });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+// ===== 그룹 해제 =====
+async function ungroupTabs(groupId: number): Promise<{ success: boolean }> {
+  try {
+    const tabs = await chrome.tabs.query({ groupId });
+    if (tabs.length > 0) {
+      const tabIds = tabs.map((t) => t.id).filter((id): id is number => id != null);
+      await chrome.tabs.ungroup(tabIds);
+    }
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+// ===== 그룹 + 탭 삭제 =====
+async function closeGroup(groupId: number): Promise<{ success: boolean }> {
+  try {
+    const tabs = await chrome.tabs.query({ groupId });
+    const tabIds = tabs.map((t) => t.id).filter((id): id is number => id != null);
+    if (tabIds.length > 0) {
+      await chrome.tabs.remove(tabIds);
+    }
     return { success: true };
   } catch {
     return { success: false };

@@ -150,6 +150,9 @@ const zh_CN: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: '是否删除分组 "{0}"？',
   deleteGroup: '删除分组',
+  ungroupTabs: '取消分组',
+  ungroupConfirm: '取消分组 "{0}"？\n（标签页将保留，仅移除分组）',
+  closeGroupWithTabs: '连同标签页一起关闭',
 
   // ── 属性面板 ──
   selectToEdit: '选择分组或标签页\n即可在此编辑属性。',

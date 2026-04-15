@@ -150,6 +150,9 @@ const de: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: 'Gruppe „{0}" löschen?',
   deleteGroup: 'Gruppe löschen',
+  ungroupTabs: 'Gruppierung aufheben',
+  ungroupConfirm: 'Gruppierung von "{0}" aufheben?\n(Tabs bleiben erhalten, nur die Gruppe wird entfernt)',
+  closeGroupWithTabs: 'Mit Tabs schließen',
 
   // ── Eigenschaftenpanel ──
   selectToEdit: 'Wählen Sie eine Gruppe oder einen Tab\num Eigenschaften zu bearbeiten.',

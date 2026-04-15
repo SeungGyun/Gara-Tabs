@@ -150,6 +150,9 @@ const fr: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: 'Supprimer le groupe « {0} » ?',
   deleteGroup: 'Supprimer le groupe',
+  ungroupTabs: 'Dissocier les onglets',
+  ungroupConfirm: 'Dissocier "{0}" ?\n(Les onglets seront conservés, seul le groupe sera supprimé)',
+  closeGroupWithTabs: 'Fermer avec les onglets',
 
   // ── Panneau de propriétés ──
   selectToEdit: 'Sélectionnez un groupe ou un onglet\npour modifier ses propriétés.',

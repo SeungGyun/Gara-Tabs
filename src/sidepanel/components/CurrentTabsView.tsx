@@ -29,6 +29,7 @@ import {
 } from '../../shared/utils/tabDragLogic';
 import type { ChromeTabGroupColor } from '../../shared/types';
 import { t } from '../../shared/i18n';
+import ContextMenu from '../../shared/components/ContextMenu';
 
 // ── 드롭 인디케이터 타입 ──
 
@@ -138,6 +139,16 @@ export default function CurrentTabsView() {
   const handleRenameGroup = useCallback(async (groupId: number, title: string) => {
     await chrome.runtime.sendMessage({ type: 'RENAME_GROUP', groupId, title });
   }, []);
+
+  const handleUngroupTabs = useCallback(async (groupId: number) => {
+    await chrome.runtime.sendMessage({ type: 'UNGROUP_TABS', groupId });
+    refresh();
+  }, [refresh]);
+
+  const handleCloseGroup = useCallback(async (groupId: number) => {
+    await chrome.runtime.sendMessage({ type: 'CLOSE_GROUP', groupId });
+    refresh();
+  }, [refresh]);
 
   const handleCreateGroup = useCallback(async () => {
     await chrome.runtime.sendMessage({ type: 'CREATE_GROUP', title: t('newGroup') });
@@ -435,6 +446,8 @@ export default function CurrentTabsView() {
                   dropIndicator={dropIndicator}
                   onToggle={() => handleToggleCollapsed(group.id, !group.collapsed)}
                   onRename={(title) => handleRenameGroup(group.id, title)}
+                  onUngroup={() => handleUngroupTabs(group.id)}
+                  onCloseGroup={() => handleCloseGroup(group.id)}
                 >
                   <SortableContext items={tabIds} strategy={verticalListSortingStrategy}>
                     {groupTabs.map((tab) => (
@@ -554,6 +567,8 @@ function SortableGroupSection({
   dropIndicator,
   onToggle,
   onRename,
+  onUngroup,
+  onCloseGroup,
   children,
 }: {
   groupId: number;
@@ -564,6 +579,8 @@ function SortableGroupSection({
   dropIndicator: DropIndicatorState | null;
   onToggle: () => void;
   onRename: (title: string) => void;
+  onUngroup: () => void;
+  onCloseGroup: () => void;
   children: React.ReactNode;
 }) {
   const sortableId = `g-${groupId}`;
@@ -571,6 +588,7 @@ function SortableGroupSection({
     id: sortableId,
   });
   const [editing, setEditing] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const handleRenameCommit = useCallback((newTitle: string) => {
     setEditing(false);
@@ -606,7 +624,7 @@ function SortableGroupSection({
         <div
           {...attributes}
           {...listeners}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-left cursor-grab active:cursor-grabbing"
+          className="group/grp w-full flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-left cursor-grab active:cursor-grabbing"
         >
           {/* 접기/펼치기 영역: 화살표 + 색상 */}
           <span
@@ -636,7 +654,30 @@ function SortableGroupSection({
             </span>
           )}
           <span className="text-xs text-gray-500">{tabCount}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = (e.target as HTMLElement).closest('button')!.getBoundingClientRect();
+              setMenuPos({ x: rect.right, y: rect.bottom + 2 });
+            }}
+            className="opacity-0 group-hover/grp:opacity-100 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-opacity"
+            title={t('deleteGroup')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z" transform="rotate(45 8 8)" />
+            </svg>
+          </button>
         </div>
+        {menuPos && (
+          <ContextMenu
+            position={menuPos}
+            onClose={() => setMenuPos(null)}
+            items={[
+              { label: t('ungroupTabs'), onClick: onUngroup },
+              { label: t('closeGroupWithTabs'), onClick: onCloseGroup, danger: true },
+            ]}
+          />
+        )}
         {open && <div className="pb-1">{children}</div>}
       </div>
 

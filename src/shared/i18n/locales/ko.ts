@@ -148,6 +148,9 @@ const ko = {
   countItems: '{0}개',
   deleteGroupConfirm: '"{0}" 그룹을 삭제하시겠습니까?',
   deleteGroup: '그룹 삭제',
+  ungroupTabs: '그룹 해제',
+  ungroupConfirm: '"{0}" 그룹을 해제하시겠습니까?\n(탭은 유지되고 그룹만 해제됩니다)',
+  closeGroupWithTabs: '탭과 함께 삭제',
 
   // ── 속성 패널 ──
   selectToEdit: '그룹 또는 탭을 선택하면\n여기에서 편집할 수 있습니다.',

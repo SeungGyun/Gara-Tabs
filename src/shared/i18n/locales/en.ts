@@ -150,6 +150,9 @@ const en: TranslationKeys = {
   countItems: '{0}',
   deleteGroupConfirm: 'Delete group "{0}"?',
   deleteGroup: 'Delete group',
+  ungroupTabs: 'Ungroup tabs',
+  ungroupConfirm: 'Ungroup "{0}"?\n(Tabs will be kept, only the group is removed)',
+  closeGroupWithTabs: 'Close with tabs',
 
   // ── Property Panel ──
   selectToEdit: 'Select a group or tab\nto edit its properties.',
